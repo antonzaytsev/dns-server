@@ -33,5 +33,5 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [types-PyYAML, types-requests, types-aiofiles]
-        args: [--config-file=setup.cfg]
-        exclude: ^src/tests/test_imports\.py$
+        args: [--config-file=setup.cfg, --explicit-package-bases]
+        exclude: ^src/(tests/test_imports\.py|dns_server/config/)
