@@ -93,7 +93,9 @@ class CacheManager:
             "timestamp": time.time(),
         }
 
-        self.logger.info(f"Domain flush completed: {domain} ({entries_flushed} entries)")
+        self.logger.info(
+            f"Domain flush completed: {domain} ({entries_flushed} entries)"
+        )
         return result
 
     async def flush_expired(self) -> Dict[str, Any]:
@@ -113,7 +115,9 @@ class CacheManager:
         self.logger.info(f"Expired entries cleanup: {entries_cleaned} entries")
         return result
 
-    async def warm_cache_from_list(self, entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def warm_cache_from_list(
+        self, entries: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
         Warm cache with list of domain/query type combinations
 

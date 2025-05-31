@@ -5,7 +5,6 @@ This script provides the main entry point for running the DNS server.
 """
 
 import asyncio
-import logging
 import platform
 import signal
 import sys
@@ -17,11 +16,9 @@ try:
         import uvloop
 
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-        logger = logging.getLogger(__name__)
-        logger.info("Using uvloop for enhanced async performance")
+        print("Using uvloop for enhanced async performance")
 except ImportError:
-    logger = logging.getLogger(__name__)
-    logger.info("uvloop not available, using default event loop")
+    print("uvloop not available, using default event loop")
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -34,8 +31,12 @@ from dns_server.core.performance import (
     connection_pool,
     performance_monitor,
 )
-
-logger = logging.getLogger(__name__)
+from dns_server.dns_logging import (
+    get_logger,
+    setup_logging,
+    start_log_management,
+    stop_log_management,
+)
 
 
 class DNSServerApp:
@@ -47,6 +48,7 @@ class DNSServerApp:
         self.dns_server = None
         self.cache = None
         self._shutdown_event = asyncio.Event()
+        self.logger = None
 
     async def initialize(self):
         """Initialize the application"""
@@ -55,8 +57,10 @@ class DNSServerApp:
             config_loader = ConfigLoader(self.config_path)
             self.config = config_loader.load_config()
 
-            # Setup logging
-            self._setup_logging()
+            # Setup structured logging first
+            await self._setup_logging()
+
+            self.logger.info("DNS server application initializing")
 
             # Initialize performance monitoring
             await performance_monitor.start_monitoring()
@@ -80,12 +84,21 @@ class DNSServerApp:
             # Set performance monitoring on DNS server
             self.dns_server.set_performance_monitor(performance_monitor)
 
-            logger.info(
-                "DNS server application initialized with performance optimizations"
+            self.logger.info(
+                "DNS server application initialized",
+                cache_size_mb=getattr(cache_config, "max_size_mb", 100)
+                if cache_config
+                else 100,
+                dns_port=self.config.server.dns_port,
+                web_port=self.config.server.web_port,
+                workers=self.config.server.workers,
             )
 
         except Exception as e:
-            logger.error(f"Failed to initialize DNS server: {e}")
+            if self.logger:
+                self.logger.error("Failed to initialize DNS server", error=str(e))
+            else:
+                print(f"Failed to initialize DNS server: {e}")
             raise
 
     def _configure_performance_settings(self):
@@ -109,31 +122,42 @@ class DNSServerApp:
             concurrency_limiter._semaphore = asyncio.Semaphore(max_concurrent)
             concurrency_limiter._queue = asyncio.Queue(maxsize=queue_size)
 
-            logger.info(
-                f"Performance settings: max_connections={max_connections}, "
-                f"max_concurrent={max_concurrent}, queue_size={queue_size}"
+            self.logger.info(
+                "Performance settings configured",
+                max_connections=max_connections,
+                max_concurrent=max_concurrent,
+                queue_size=queue_size,
+                connection_timeout=connection_timeout,
             )
 
-    def _setup_logging(self):
-        """Setup logging configuration"""
+    async def _setup_logging(self):
+        """Setup structured logging configuration"""
         log_config = getattr(self.config, "logging", None)
         if log_config:
-            level = getattr(log_config, "level", "INFO")
-            format_str = getattr(log_config, "format", "standard")
+            # Setup structured logging
+            setup_logging(log_config)
 
-            if format_str == "json":
-                # For structured logging, we'll use a simple format for now
-                log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            else:
-                log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            # Start log management
+            await start_log_management(log_config)
 
-            logging.basicConfig(
-                level=getattr(logging, level.upper()),
-                format=log_format,
-                datefmt="%Y-%m-%d %H:%M:%S",
+            # Get logger for this module
+            self.logger = get_logger("dns_server_app")
+
+            self.logger.info(
+                "Structured logging configured",
+                level=log_config.level,
+                format=log_config.format,
+                file=log_config.file,
+                max_size_mb=log_config.max_size_mb,
+                backup_count=log_config.backup_count,
             )
         else:
+            # Fallback to basic logging
+            import logging
+
             logging.basicConfig(level=logging.INFO)
+            self.logger = get_logger("dns_server_app")
+            self.logger.warning("No logging configuration found, using defaults")
 
     async def start(self):
         """Start the DNS server"""
@@ -142,8 +166,11 @@ class DNSServerApp:
 
         try:
             await self.dns_server.start()
-            logger.info(
-                "DNS server started successfully with performance optimizations"
+            self.logger.info(
+                "DNS server started successfully",
+                bind_address=self.config.server.bind_address,
+                dns_port=self.config.server.dns_port,
+                web_port=self.config.server.web_port,
             )
 
             # Setup signal handlers
@@ -165,7 +192,7 @@ class DNSServerApp:
                 pass
 
         except Exception as e:
-            logger.error(f"Error starting DNS server: {e}")
+            self.logger.error("Error starting DNS server", error=str(e))
             raise
         finally:
             await self.stop()
@@ -176,19 +203,19 @@ class DNSServerApp:
             try:
                 await asyncio.sleep(60)  # Run cleanup every minute
                 await connection_pool.cleanup_old_connections()
-                logger.debug("Performed connection pool cleanup")
+                self.logger.debug("Performed connection pool cleanup")
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in cleanup loop: {e}")
+                self.logger.error("Error in cleanup loop", error=str(e))
 
     async def stop(self):
         """Stop the DNS server"""
-        logger.info("Shutting down DNS server...")
+        self.logger.info("Shutting down DNS server")
 
         if self.dns_server:
             await self.dns_server.stop()
-            logger.info("DNS server stopped")
+            self.logger.info("DNS server stopped")
 
         # Stop performance monitoring
         await performance_monitor.stop_monitoring()
@@ -196,11 +223,14 @@ class DNSServerApp:
         # Clean up connection pool
         await connection_pool.cleanup_old_connections()
 
-        logger.info("DNS server application shutdown complete")
+        # Stop log management
+        await stop_log_management()
+
+        self.logger.info("DNS server application shutdown complete")
 
     def _signal_handler(self):
         """Handle shutdown signals"""
-        logger.info("Received shutdown signal")
+        self.logger.info("Received shutdown signal")
         self._shutdown_event.set()
 
     async def health_check(self):
@@ -209,6 +239,14 @@ class DNSServerApp:
             health = await self.dns_server.health_check()
             # Add performance metrics to health check
             health["performance"] = performance_monitor.get_stats()
+
+            # Add logging stats if available
+            from dns_server.dns_logging import get_log_manager
+
+            log_manager = get_log_manager()
+            if log_manager:
+                health["logging"] = log_manager.get_log_stats()
+
             return health
         return {"status": "not_running"}
 
@@ -242,6 +280,8 @@ async def main():
             print(f"Health status: {health['status']}")
             if "performance" in health:
                 print(f"Performance stats: {health['performance']}")
+            if "logging" in health:
+                print(f"Logging stats: {health['logging']}")
             sys.exit(0 if health["status"] == "healthy" else 1)
         except Exception as e:
             print(f"Health check failed: {e}")
@@ -264,9 +304,9 @@ async def main():
         try:
             await app.start()
         except KeyboardInterrupt:
-            logger.info("Received keyboard interrupt")
+            print("\nReceived keyboard interrupt")
         except Exception as e:
-            logger.error(f"DNS server failed: {e}")
+            print(f"DNS server failed: {e}")
             sys.exit(1)
 
 

@@ -11,8 +11,6 @@ This module implements the main DNS server functionality including:
 """
 
 import asyncio
-import logging
-import socket
 import struct
 import time
 import uuid
@@ -20,17 +18,23 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 from .message import (
-    DNSClass,
     DNSHeader,
     DNSMessage,
-    DNSQuestion,
-    DNSRecordType,
     DNSResponseCode,
 )
 from .performance import PerformanceMonitor, concurrency_limiter, timing_decorator
 from .resolver import DNSResolver, IterativeResolver
 
-logger = logging.getLogger(__name__)
+# Import structured logging
+from ..dns_logging import (
+    get_logger,
+    get_request_tracker,
+    log_performance_event,
+    log_security_event,
+    format_response_data,
+)
+
+logger = get_logger("dns_server_core")
 
 
 @dataclass
@@ -72,7 +76,9 @@ class DNSUDPProtocol(asyncio.DatagramProtocol):
         """Called when UDP socket is ready"""
         self.transport = transport
         logger.info(
-            f"DNS UDP server listening on {transport.get_extra_info('sockname')}"
+            "DNS UDP server listening",
+            address=transport.get_extra_info("sockname")[0],
+            port=transport.get_extra_info("sockname")[1],
         )
 
     def datagram_received(self, data: bytes, addr: Tuple[str, int]):
@@ -99,15 +105,20 @@ class DNSUDPProtocol(asyncio.DatagramProtocol):
         except RuntimeError as e:
             # Handle backpressure (queue full, etc.)
             logger.warning(
-                f"Request from {client_ip} rejected due to backpressure: {e}"
+                "Request rejected due to backpressure",
+                client_ip=client_ip,
+                error=str(e),
             )
-            # Don't send response for rejected requests
+            # Log security event for potential DDoS
+            log_security_event("backpressure_rejection", client_ip)
         except Exception as e:
-            logger.error(f"Error handling UDP request from {client_ip}: {e}")
+            logger.error(
+                "Error handling UDP request", client_ip=client_ip, error=str(e)
+            )
 
     def error_received(self, exc):
         """Handle UDP errors"""
-        logger.error(f"DNS UDP protocol error: {exc}")
+        logger.error("DNS UDP protocol error", error=str(exc))
 
 
 class DNSServer:
@@ -119,6 +130,9 @@ class DNSServer:
         self.iterative_resolver = IterativeResolver(self.resolver)
         self.cache = None  # Will be set externally
         self.performance_monitor = None  # Will be set externally
+
+        # Get DNS request tracker
+        self.request_tracker = get_request_tracker()
 
         # Server state
         self._udp_server = None
@@ -177,10 +191,15 @@ class DNSServer:
             self._tcp_server = tcp_server
 
             self._is_running = True
-            logger.info(f"DNS server started on {bind_address}:{dns_port}")
+            logger.info(
+                "DNS server started",
+                bind_address=bind_address,
+                dns_port=dns_port,
+                protocol="UDP+TCP",
+            )
 
         except Exception as e:
-            logger.error(f"Failed to start DNS server: {e}")
+            logger.error("Failed to start DNS server", error=str(e))
             await self.stop()
             raise
 
@@ -189,7 +208,7 @@ class DNSServer:
         if not self._is_running:
             return
 
-        logger.info("Stopping DNS server...")
+        logger.info("Stopping DNS server")
 
         # Stop UDP server
         if self._udp_server:
@@ -221,8 +240,12 @@ class DNSServer:
                 await self._process_tcp_connection(reader, writer, client_ip)
         except RuntimeError as e:
             logger.warning(
-                f"TCP connection from {client_ip} rejected due to backpressure: {e}"
+                "TCP connection rejected due to backpressure",
+                client_ip=client_ip,
+                error=str(e),
             )
+            # Log security event for potential DDoS
+            log_security_event("backpressure_rejection", client_ip)
         finally:
             writer.close()
             await writer.wait_closed()
@@ -261,7 +284,7 @@ class DNSServer:
             # Client disconnected
             pass
         except Exception as e:
-            logger.error(f"TCP client error for {client_ip}: {e}")
+            logger.error("TCP client error", client_ip=client_ip, error=str(e))
 
     @timing_decorator("dns_request_handling", None)  # Will be set dynamically
     async def handle_dns_request(
@@ -277,41 +300,59 @@ class DNSServer:
                 self.performance_monitor,
             )
 
+        # Start request tracking
+        request_id = self.request_tracker.start_request()
         start_time = time.time()
-        request_metrics = None
-        response_metrics = None
 
         try:
             # Parse DNS message
             try:
                 query = DNSMessage.from_bytes(data)
             except Exception as e:
-                logger.warning(f"Malformed DNS packet from {client_ip}: {e}")
+                logger.warning(
+                    "Malformed DNS packet", client_ip=client_ip, error=str(e)
+                )
                 self._stats["errors"] += 1
                 if self.performance_monitor:
                     self.performance_monitor.record_error("malformed_packet")
+
+                # Log the error
+                self.request_tracker.end_request(
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    query_type="UNKNOWN",
+                    domain="UNKNOWN",
+                    response_code="FORMERR",
+                    cache_hit=False,
+                    error="Malformed DNS packet",
+                )
+
                 return self._create_format_error_response(data)
 
             # Validate query
             if not query.is_query() or not query.questions:
-                logger.warning(f"Invalid DNS query from {client_ip}")
+                logger.warning("Invalid DNS query", client_ip=client_ip)
                 self._stats["errors"] += 1
                 if self.performance_monitor:
                     self.performance_monitor.record_error("invalid_query")
+
+                # Log the error
+                self.request_tracker.end_request(
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    query_type="UNKNOWN",
+                    domain="UNKNOWN",
+                    response_code="FORMERR",
+                    cache_hit=False,
+                    error="Invalid DNS query",
+                )
+
                 return self._create_format_error_response(data)
 
             # Get the first question
             question = query.questions[0]
-
-            # Create request metrics
-            request_metrics = RequestMetrics(
-                request_id=str(uuid.uuid4()),
-                client_ip=client_ip,
-                start_time=start_time,
-                query_type=self._get_record_type_name(question.qtype),
-                domain=question.name,
-                protocol=protocol,
-            )
+            query_type = self._get_record_type_name(question.qtype)
+            domain = question.name
 
             # Update stats
             self._stats["total_queries"] += 1
@@ -322,9 +363,24 @@ class DNSServer:
 
             # Check rate limiting
             if not self._check_rate_limit(client_ip):
-                logger.warning(f"Rate limit exceeded for {client_ip}")
+                logger.warning("Rate limit exceeded", client_ip=client_ip)
                 if self.performance_monitor:
                     self.performance_monitor.record_error("rate_limit_exceeded")
+
+                # Log security event
+                log_security_event("rate_limit_exceeded", client_ip, domain)
+
+                # Log the request
+                self.request_tracker.end_request(
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    query_type=query_type,
+                    domain=domain,
+                    response_code="REFUSED",
+                    cache_hit=False,
+                    error="Rate limit exceeded",
+                )
+
                 response = query.create_response(DNSResponseCode.REFUSED)
                 response.header.transaction_id = query.header.transaction_id
                 return response.to_bytes()
@@ -336,22 +392,35 @@ class DNSServer:
             # Resolve the query
             cache_hit = False
             upstream_server = None
+            response_data = []
 
             try:
                 if recursion_desired and recursion_available:
-                    # Use recursive resolver
-                    resolved_response = await self.resolver.resolve(
-                        question, use_recursion=True
-                    )
-
-                    # Check if this was a cache hit
+                    # Check cache first
                     if self.cache:
                         cached = await self.cache.get(question)
                         if cached:
                             cache_hit = True
                             self._stats["cache_hits"] += 1
+                            resolved_response = cached
                         else:
                             self._stats["cache_misses"] += 1
+                            # Use recursive resolver
+                            resolved_response = await self.resolver.resolve(
+                                question, use_recursion=True
+                            )
+                            # Get upstream server info if available
+                            upstream_server = getattr(
+                                resolved_response, "upstream_server", None
+                            )
+                    else:
+                        # Use recursive resolver without cache
+                        resolved_response = await self.resolver.resolve(
+                            question, use_recursion=True
+                        )
+                        upstream_server = getattr(
+                            resolved_response, "upstream_server", None
+                        )
                 else:
                     # Use iterative resolver
                     resolved_response = await self.iterative_resolver.resolve(question)
@@ -366,15 +435,30 @@ class DNSServer:
                 response.authority = resolved_response.authority
                 response.additional = resolved_response.additional
 
+                # Format response data for logging
+                response_data = format_response_data(response.answers, query_type)
+
             except Exception as e:
-                logger.error(f"Resolution failed for {question.name}: {e}")
+                logger.error("Resolution failed", domain=domain, error=str(e))
                 if self.performance_monitor:
                     self.performance_monitor.record_error("resolution_failed")
+
+                # Log the error
+                self.request_tracker.end_request(
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    query_type=query_type,
+                    domain=domain,
+                    response_code="SERVFAIL",
+                    cache_hit=False,
+                    error=f"Resolution failed: {str(e)}",
+                )
+
                 response = query.create_response(DNSResponseCode.SERVFAIL)
                 response.header.transaction_id = query.header.transaction_id
                 response.header.ra = recursion_available
 
-            # Calculate response time
+            # Calculate response time and update stats
             response_time_ms = (time.time() - start_time) * 1000
             self._stats["response_times"].append(response_time_ms)
 
@@ -382,45 +466,53 @@ class DNSServer:
             if len(self._stats["response_times"]) > 1000:
                 self._stats["response_times"] = self._stats["response_times"][-1000:]
 
-            # Create response metrics
-            response_data = []
-            for answer in response.answers:
-                response_data.append(answer.get_readable_rdata())
-
-            response_metrics = ResponseMetrics(
-                response_code=self._get_response_code_name(response.header.rcode),
-                response_time_ms=response_time_ms,
+            # Log the successful request
+            response_code = self._get_response_code_name(response.header.rcode)
+            self.request_tracker.end_request(
+                request_id=request_id,
+                client_ip=client_ip,
+                query_type=query_type,
+                domain=domain,
+                response_code=response_code,
                 cache_hit=cache_hit,
                 upstream_server=upstream_server,
                 response_data=response_data,
-                answer_count=len(response.answers),
             )
 
-            # Log the request/response
-            await self._log_dns_transaction(request_metrics, response_metrics)
+            # Log performance event if slow
+            if response_time_ms > 1000:  # Log slow queries (> 1 second)
+                log_performance_event(
+                    "slow_query",
+                    response_time_ms,
+                    domain=domain,
+                    query_type=query_type,
+                    client_ip=client_ip,
+                )
 
             return response.to_bytes()
 
         except Exception as e:
-            logger.error(f"Unexpected error handling request from {client_ip}: {e}")
+            logger.error(
+                "Unexpected error handling request", client_ip=client_ip, error=str(e)
+            )
             self._stats["errors"] += 1
             if self.performance_monitor:
                 self.performance_monitor.record_error("unexpected_error")
 
+            # Log the error
+            response_time_ms = (time.time() - start_time) * 1000
+            self.request_tracker.end_request(
+                request_id=request_id,
+                client_ip=client_ip,
+                query_type="UNKNOWN",
+                domain="UNKNOWN",
+                response_code="SERVFAIL",
+                cache_hit=False,
+                error=f"Unexpected error: {str(e)}",
+            )
+
             # Try to create a SERVFAIL response
             try:
-                if request_metrics:
-                    response_time_ms = (time.time() - start_time) * 1000
-                    response_metrics = ResponseMetrics(
-                        response_code="SERVFAIL",
-                        response_time_ms=response_time_ms,
-                        cache_hit=False,
-                        upstream_server=None,
-                        response_data=[],
-                        answer_count=0,
-                    )
-                    await self._log_dns_transaction(request_metrics, response_metrics)
-
                 # Parse original query to get transaction ID
                 query = DNSMessage.from_bytes(data)
                 response = query.create_response(DNSResponseCode.SERVFAIL)
@@ -486,64 +578,38 @@ class DNSServer:
         self._rate_limits[client_ip].append(current_time)
         return True
 
-    async def _log_dns_transaction(
-        self, request_metrics: RequestMetrics, response_metrics: ResponseMetrics
-    ):
-        """Log DNS transaction in structured JSON format"""
-        log_entry = {
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%fZ", time.gmtime()),
-            "request_id": request_metrics.request_id,
-            "client_ip": request_metrics.client_ip,
-            "query_type": request_metrics.query_type,
-            "domain": request_metrics.domain,
-            "protocol": request_metrics.protocol,
-            "response_code": response_metrics.response_code,
-            "response_time_ms": round(response_metrics.response_time_ms, 2),
-            "cache_hit": response_metrics.cache_hit,
-            "upstream_server": response_metrics.upstream_server,
-            "response_data": response_metrics.response_data,
-            "answer_count": response_metrics.answer_count,
-        }
-
-        # Use structured logging if available
-        logger.info("DNS query processed", extra={"dns_transaction": log_entry})
-
     def _get_record_type_name(self, rtype: int) -> str:
-        """Get human-readable name for DNS record type"""
-        type_map = {
-            DNSRecordType.A: "A",
-            DNSRecordType.AAAA: "AAAA",
-            DNSRecordType.CNAME: "CNAME",
-            DNSRecordType.MX: "MX",
-            DNSRecordType.NS: "NS",
-            DNSRecordType.PTR: "PTR",
-            DNSRecordType.TXT: "TXT",
-            DNSRecordType.SOA: "SOA",
-            DNSRecordType.ANY: "ANY",
+        """Convert DNS record type to string"""
+        type_names = {
+            1: "A",
+            28: "AAAA",
+            5: "CNAME",
+            15: "MX",
+            2: "NS",
+            12: "PTR",
+            16: "TXT",
+            6: "SOA",
+            33: "SRV",
+            99: "SPF",
         }
-        return type_map.get(rtype, f"TYPE{rtype}")
+        return type_names.get(rtype, f"TYPE{rtype}")
 
     def _get_response_code_name(self, rcode: int) -> str:
-        """Get human-readable name for DNS response code"""
-        code_map = {
-            DNSResponseCode.NOERROR: "NOERROR",
-            DNSResponseCode.FORMERR: "FORMERR",
-            DNSResponseCode.SERVFAIL: "SERVFAIL",
-            DNSResponseCode.NXDOMAIN: "NXDOMAIN",
-            DNSResponseCode.NOTIMP: "NOTIMP",
-            DNSResponseCode.REFUSED: "REFUSED",
+        """Convert DNS response code to string"""
+        code_names = {
+            0: "NOERROR",
+            1: "FORMERR",
+            2: "SERVFAIL",
+            3: "NXDOMAIN",
+            4: "NOTIMP",
+            5: "REFUSED",
         }
-        return code_map.get(rcode, f"RCODE{rcode}")
+        return code_names.get(rcode, f"RCODE{rcode}")
 
     def get_stats(self) -> Dict[str, Any]:
         """Get server statistics"""
         uptime = (
             time.time() - self._stats["start_time"] if self._stats["start_time"] else 0
-        )
-
-        response_times = self._stats["response_times"]
-        avg_response_time = (
-            sum(response_times) / len(response_times) if response_times else 0
         )
 
         stats = {
@@ -553,53 +619,61 @@ class DNSServer:
             "tcp_queries": self._stats["tcp_queries"],
             "cache_hits": self._stats["cache_hits"],
             "cache_misses": self._stats["cache_misses"],
-            "cache_hit_ratio": (
-                self._stats["cache_hits"]
-                / max(1, self._stats["cache_hits"] + self._stats["cache_misses"])
-            ),
             "errors": self._stats["errors"],
-            "avg_response_time_ms": round(avg_response_time, 2),
-            "qps": (self._stats["total_queries"] / max(1, uptime) if uptime > 0 else 0),
             "is_running": self._is_running,
         }
 
-        # Add performance monitoring stats if available
-        if self.performance_monitor:
-            stats["performance"] = self.performance_monitor.get_stats()
+        # Calculate response time statistics
+        if self._stats["response_times"]:
+            response_times = self._stats["response_times"]
+            stats.update(
+                {
+                    "avg_response_time_ms": round(
+                        sum(response_times) / len(response_times), 2
+                    ),
+                    "min_response_time_ms": round(min(response_times), 2),
+                    "max_response_time_ms": round(max(response_times), 2),
+                }
+            )
+
+        # Calculate cache hit ratio
+        total_cache_requests = stats["cache_hits"] + stats["cache_misses"]
+        if total_cache_requests > 0:
+            stats["cache_hit_ratio"] = round(
+                stats["cache_hits"] / total_cache_requests, 3
+            )
+        else:
+            stats["cache_hit_ratio"] = 0.0
+
+        # Calculate queries per second
+        if uptime > 0:
+            stats["queries_per_second"] = round(stats["total_queries"] / uptime, 2)
+        else:
+            stats["queries_per_second"] = 0.0
 
         return stats
 
     async def health_check(self) -> Dict[str, Any]:
-        """Comprehensive health check"""
+        """Perform health check"""
         health = {
-            "status": "healthy",
-            "server": self.get_stats(),
-            "resolver": await self.resolver.health_check()
-            if self.resolver
-            else {"status": "unavailable"},
-            "cache": await self.cache.get_stats()
-            if self.cache
-            else {"status": "unavailable"},
+            "status": "healthy" if self._is_running else "stopped",
+            "timestamp": time.time(),
+            "uptime_seconds": time.time() - self._stats["start_time"]
+            if self._stats["start_time"]
+            else 0,
         }
 
-        # Add performance monitoring health if available
-        if self.performance_monitor:
-            perf_stats = self.performance_monitor.get_stats()
-            health["performance"] = perf_stats
+        # Add basic stats
+        health.update(self.get_stats())
 
-            # Check for performance issues
-            memory_stats = perf_stats.get("memory", {})
-            current_memory = memory_stats.get("current_mb", 0)
+        # Check resolver health
+        if hasattr(self.resolver, "health_check"):
+            resolver_health = await self.resolver.health_check()
+            health["resolver"] = resolver_health
 
-            if current_memory > 1000:  # > 1GB
-                health["status"] = "degraded"
-                health["warnings"] = health.get("warnings", [])
-                health["warnings"].append(f"High memory usage: {current_memory:.1f} MB")
-
-        # Determine overall health
-        if not self._is_running:
-            health["status"] = "unhealthy"
-        elif health["resolver"]["status"] == "degraded":
-            health["status"] = "degraded"
+        # Check cache health
+        if self.cache and hasattr(self.cache, "health_check"):
+            cache_health = await self.cache.health_check()
+            health["cache"] = cache_health
 
         return health
