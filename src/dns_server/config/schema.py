@@ -47,6 +47,12 @@ class ServerConfig:
     web_port: int = 8080
     workers: int = 4
 
+    # Performance Optimization Settings
+    max_concurrent_requests: int = 1000
+    request_queue_size: int = 5000
+    max_upstream_connections: int = 100
+    connection_timeout: float = 30.0
+
     def __post_init__(self) -> None:
         """Validate server configuration."""
         if not validate_ip_address(self.bind_address):
@@ -60,6 +66,27 @@ class ServerConfig:
 
         if not validate_positive_int(self.workers):
             raise ValueError(f"Workers must be positive: {self.workers}")
+
+        # Validate performance optimization settings
+        if not validate_positive_int(self.max_concurrent_requests):
+            raise ValueError(
+                f"Max concurrent requests must be positive: {self.max_concurrent_requests}"
+            )
+
+        if not validate_positive_int(self.request_queue_size):
+            raise ValueError(
+                f"Request queue size must be positive: {self.request_queue_size}"
+            )
+
+        if not validate_positive_int(self.max_upstream_connections):
+            raise ValueError(
+                f"Max upstream connections must be positive: {self.max_upstream_connections}"
+            )
+
+        if self.connection_timeout <= 0:
+            raise ValueError(
+                f"Connection timeout must be positive: {self.connection_timeout}"
+            )
 
 
 @dataclass
