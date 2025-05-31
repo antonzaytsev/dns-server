@@ -156,6 +156,11 @@ class ConfigLoader:
                 "dns_port": config.server.dns_port,
                 "web_port": config.server.web_port,
                 "workers": config.server.workers,
+                # Performance Optimization Settings
+                "max_concurrent_requests": config.server.max_concurrent_requests,
+                "request_queue_size": config.server.request_queue_size,
+                "max_upstream_connections": config.server.max_upstream_connections,
+                "connection_timeout": config.server.connection_timeout,
             },
             "upstream_servers": config.upstream_servers,
             "cache": {
