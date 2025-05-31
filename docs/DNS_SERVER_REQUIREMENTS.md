@@ -159,4 +159,4 @@
 - **Installation Guide**: Step-by-step installation instructions
 - **Configuration Guide**: Comprehensive configuration documentation
 - **API Documentation**: Web interface and configuration API docs
-- **Troubleshooting Guide**: Common issues and solutions 
+- **Troubleshooting Guide**: Common issues and solutions

@@ -82,31 +82,31 @@ This document provides a detailed step-by-step implementation plan for building 
        dns_port: 5353  # Non-privileged port for development
        web_port: 8080
        workers: 4
-     
+
      upstream_servers:
        - "8.8.8.8"
        - "1.1.1.1"
        - "208.67.222.222"
-     
+
      cache:
        max_size_mb: 100
        default_ttl: 300
        min_ttl: 1
        max_ttl: 86400
        negative_ttl: 300
-     
+
      logging:
        level: "INFO"
        format: "json"
        file: "logs/dns-server.log"
        max_size_mb: 50
        backup_count: 5
-     
+
      security:
        rate_limit_per_ip: 100
        allowed_networks: ["0.0.0.0/0"]
        blacklist_enabled: true
-     
+
      web:
        enabled: true
        real_time_updates: true
@@ -156,14 +156,14 @@ class DNSServer:
         self.cache = DNSCache(config.cache)
         self.resolver = DNSResolver(config)
         self.logger = get_logger()
-    
+
     async def handle_udp_request(self, data, addr):
         # Parse DNS message
         # Check cache first
         # Forward to resolver if needed
         # Log request/response
         # Return response
-    
+
     async def handle_tcp_request(self, reader, writer):
         # Similar to UDP but handle TCP framing
 ```
@@ -236,7 +236,7 @@ class CacheEntry:
     ttl: int
     access_count: int
     last_accessed: float
-    
+
     def is_expired(self) -> bool:
         return time.time() > (self.created_at + self.ttl)
 ```
@@ -386,7 +386,7 @@ class DNSMonitor {
         this.ws = new WebSocket('ws://localhost:8080/ws');
         this.queryHistory = [];
     }
-    
+
     onMessage(event) {
         const data = JSON.parse(event.data);
         this.updateDashboard(data);
@@ -711,4 +711,4 @@ The implementation will be considered successful when:
 - **Documentation gaps**: Documentation written alongside implementation
 - **Configuration complexity**: Extensive validation and clear error messages
 
-This implementation plan provides a systematic approach to building a production-ready DNS server that fully satisfies all specified requirements while maintaining high code quality and operational reliability. 
+This implementation plan provides a systematic approach to building a production-ready DNS server that fully satisfies all specified requirements while maintaining high code quality and operational reliability.
