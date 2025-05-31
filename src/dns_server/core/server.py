@@ -29,7 +29,21 @@ from .message import DNSHeader, DNSMessage, DNSResponseCode
 from .performance import PerformanceMonitor, concurrency_limiter, timing_decorator
 from .resolver import DNSResolver, IterativeResolver
 
-logger = get_logger("dns_server_core")
+# Logger will be initialized when DNSServer is created
+logger = None
+
+
+def _get_logger():
+    """Get logger instance, initializing if needed."""
+    global logger
+    if logger is None:
+        try:
+            logger = get_logger("dns_server_core")
+        except RuntimeError:
+            # Fallback to basic logging if structured logging not configured
+            import logging
+            logger = logging.getLogger("dns_server_core")
+    return logger
 
 
 @dataclass
@@ -70,7 +84,7 @@ class DNSUDPProtocol(asyncio.DatagramProtocol):
     def connection_made(self, transport):
         """Called when UDP socket is ready"""
         self.transport = transport
-        logger.info(
+        _get_logger().info(
             "DNS UDP server listening",
             address=transport.get_extra_info("sockname")[0],
             port=transport.get_extra_info("sockname")[1],
@@ -99,7 +113,7 @@ class DNSUDPProtocol(asyncio.DatagramProtocol):
                     self.transport.sendto(response_data, addr)
         except RuntimeError as e:
             # Handle backpressure (queue full, etc.)
-            logger.warning(
+            _get_logger().warning(
                 "Request rejected due to backpressure",
                 client_ip=client_ip,
                 error=str(e),
@@ -107,13 +121,13 @@ class DNSUDPProtocol(asyncio.DatagramProtocol):
             # Log security event for potential DDoS
             log_security_event("backpressure_rejection", client_ip)
         except Exception as e:
-            logger.error(
+            _get_logger().error(
                 "Error handling UDP request", client_ip=client_ip, error=str(e)
             )
 
     def error_received(self, exc):
         """Handle UDP errors"""
-        logger.error("DNS UDP protocol error", error=str(exc))
+        _get_logger().error("DNS UDP protocol error", error=str(exc))
 
 
 class DNSServer:
@@ -163,7 +177,7 @@ class DNSServer:
     async def start(self) -> None:
         """Start the DNS server (UDP and TCP)"""
         if self._is_running:
-            logger.warning("Server is already running")
+            _get_logger().warning("Server is already running")
             return
 
         self._stats["start_time"] = time.time()
@@ -186,7 +200,7 @@ class DNSServer:
             self._tcp_server = tcp_server
 
             self._is_running = True
-            logger.info(
+            _get_logger().info(
                 "DNS server started",
                 bind_address=bind_address,
                 dns_port=dns_port,
@@ -194,7 +208,7 @@ class DNSServer:
             )
 
         except Exception as e:
-            logger.error("Failed to start DNS server", error=str(e))
+            _get_logger().error("Failed to start DNS server", error=str(e))
             await self.stop()
             raise
 
@@ -203,7 +217,7 @@ class DNSServer:
         if not self._is_running:
             return
 
-        logger.info("Stopping DNS server")
+        _get_logger().info("Stopping DNS server")
 
         # Stop UDP server
         if self._udp_server:
@@ -220,7 +234,7 @@ class DNSServer:
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
 
         self._is_running = False
-        logger.info("DNS server stopped")
+        _get_logger().info("DNS server stopped")
 
     async def _handle_tcp_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -234,7 +248,7 @@ class DNSServer:
             async with await concurrency_limiter.acquire():
                 await self._process_tcp_connection(reader, writer, client_ip)
         except RuntimeError as e:
-            logger.warning(
+            _get_logger().warning(
                 "TCP connection rejected due to backpressure",
                 client_ip=client_ip,
                 error=str(e),
@@ -279,7 +293,7 @@ class DNSServer:
             # Client disconnected
             pass
         except Exception as e:
-            logger.error("TCP client error", client_ip=client_ip, error=str(e))
+            _get_logger().error("TCP client error", client_ip=client_ip, error=str(e))
 
     @timing_decorator("dns_request_handling", None)  # Will be set dynamically
     async def handle_dns_request(
@@ -304,7 +318,7 @@ class DNSServer:
             try:
                 query = DNSMessage.from_bytes(data)
             except Exception as e:
-                logger.warning(
+                _get_logger().warning(
                     "Malformed DNS packet", client_ip=client_ip, error=str(e)
                 )
                 self._stats["errors"] += 1
@@ -326,7 +340,7 @@ class DNSServer:
 
             # Validate query
             if not query.is_query() or not query.questions:
-                logger.warning("Invalid DNS query", client_ip=client_ip)
+                _get_logger().warning("Invalid DNS query", client_ip=client_ip)
                 self._stats["errors"] += 1
                 if self.performance_monitor:
                     self.performance_monitor.record_error("invalid_query")
@@ -358,7 +372,7 @@ class DNSServer:
 
             # Check rate limiting
             if not self._check_rate_limit(client_ip):
-                logger.warning("Rate limit exceeded", client_ip=client_ip)
+                _get_logger().warning("Rate limit exceeded", client_ip=client_ip)
                 if self.performance_monitor:
                     self.performance_monitor.record_error("rate_limit_exceeded")
 
@@ -434,7 +448,7 @@ class DNSServer:
                 response_data = format_response_data(response.answers, query_type)
 
             except Exception as e:
-                logger.error("Resolution failed", domain=domain, error=str(e))
+                _get_logger().error("Resolution failed", domain=domain, error=str(e))
                 if self.performance_monitor:
                     self.performance_monitor.record_error("resolution_failed")
 
@@ -487,7 +501,7 @@ class DNSServer:
             return response.to_bytes()
 
         except Exception as e:
-            logger.error(
+            _get_logger().error(
                 "Unexpected error handling request", client_ip=client_ip, error=str(e)
             )
             self._stats["errors"] += 1
