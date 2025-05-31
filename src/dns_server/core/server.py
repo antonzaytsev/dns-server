@@ -17,22 +17,17 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
-from .message import (
-    DNSHeader,
-    DNSMessage,
-    DNSResponseCode,
-)
-from .performance import PerformanceMonitor, concurrency_limiter, timing_decorator
-from .resolver import DNSResolver, IterativeResolver
-
 # Import structured logging
 from ..dns_logging import (
+    format_response_data,
     get_logger,
     get_request_tracker,
     log_performance_event,
     log_security_event,
-    format_response_data,
 )
+from .message import DNSHeader, DNSMessage, DNSResponseCode
+from .performance import PerformanceMonitor, concurrency_limiter, timing_decorator
+from .resolver import DNSResolver, IterativeResolver
 
 logger = get_logger("dns_server_core")
 
