@@ -9,6 +9,7 @@ websockets>=11.0
 prometheus-client>=0.16.0
 structlog>=22.3.0
 click>=8.1.0    # For CLI interface
+watchdog>=3.0.0  # For configuration hot reload
 
 # Development and testing dependencies
 pytest>=7.2.0
