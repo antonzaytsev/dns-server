@@ -34,8 +34,8 @@ class DNSServerApp:
         """Initialize the application"""
         try:
             # Load configuration
-            config_loader = ConfigLoader()
-            self.config = config_loader.load_config(self.config_path)
+            config_loader = ConfigLoader(self.config_path)
+            self.config = config_loader.load_config()
 
             # Setup logging
             self._setup_logging()
