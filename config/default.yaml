@@ -4,7 +4,7 @@
 # Server Configuration
 server:
   bind_address: "127.0.0.1"
-  dns_port: 5353  # Non-privileged port for development
+  dns_port: 9953  # Non-privileged port for development
   web_port: 8080
   workers: 4
 
