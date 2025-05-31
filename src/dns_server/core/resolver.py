@@ -2,11 +2,12 @@
 DNS Resolver Engine
 
 This module implements the core DNS resolution functionality including:
-- Recursive resolution
+- Recursive resolution with connection pooling
 - Iterative resolution
 - Upstream forwarder with failover logic
 - Root hints management
 - Query timeout and retry mechanisms
+- Performance optimization with connection pooling
 """
 
 import asyncio
@@ -27,6 +28,7 @@ from .message import (
     DNSResourceRecord,
     DNSResponseCode,
 )
+from .performance import PerformanceMonitor, connection_pool, timing_decorator
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +73,7 @@ class QueryContext:
 
 
 class DNSResolver:
-    """DNS Resolution Engine"""
+    """DNS Resolution Engine with performance optimizations"""
 
     # Root name servers (built-in root hints)
     ROOT_SERVERS = [
@@ -94,7 +96,7 @@ class DNSResolver:
         self.config = config
         self.upstream_servers = self._load_upstream_servers(config.upstream_servers)
         self.cache = None  # Will be set by the server
-        self.transport_pool = {}  # Connection pool for UDP sockets
+        self.performance_monitor = None  # Will be set by the server
         self._transaction_counter = 0
 
     def _load_upstream_servers(
@@ -124,12 +126,21 @@ class DNSResolver:
         """Set the cache instance"""
         self.cache = cache
 
+    def set_performance_monitor(self, monitor: PerformanceMonitor):
+        """Set the performance monitor"""
+        self.performance_monitor = monitor
+
+    @timing_decorator("dns_resolution", None)  # Will be set dynamically
     async def resolve(
         self, question: DNSQuestion, use_recursion: bool = True
     ) -> DNSMessage:
         """
         Main resolve method that routes queries to appropriate resolution strategy
         """
+        # Set up timing decorator with current performance monitor
+        if self.performance_monitor:
+            timing_decorator.__defaults__ = ("dns_resolution", self.performance_monitor)
+
         context = QueryContext(original_question=question)
 
         try:
@@ -138,6 +149,10 @@ class DNSResolver:
                 cached_response = await self.cache.get(question)
                 if cached_response:
                     logger.debug(f"Cache hit for {question.name} {question.qtype}")
+                    if self.performance_monitor:
+                        self.performance_monitor.record_operation_time(
+                            "cache_lookup", 0.001
+                        )
                     return cached_response
 
             # Determine resolution strategy
@@ -160,13 +175,22 @@ class DNSResolver:
 
         except Exception as e:
             logger.error(f"Resolution failed for {question.name}: {e}")
+            if self.performance_monitor:
+                self.performance_monitor.record_error("dns_resolution_failed")
             # Return SERVFAIL response
             return self._create_error_response(question, DNSResponseCode.SERVFAIL)
 
+    @timing_decorator("upstream_forwarding", None)
     async def _forward_to_upstream(
         self, question: DNSQuestion, context: QueryContext
     ) -> DNSMessage:
-        """Forward query to upstream servers with failover"""
+        """Forward query to upstream servers with failover and connection pooling"""
+        # Set up timing decorator with current performance monitor
+        if self.performance_monitor:
+            timing_decorator.__defaults__ = (
+                "upstream_forwarding",
+                self.performance_monitor,
+            )
 
         available_servers = [s for s in self.upstream_servers if s.is_available]
         if not available_servers:
@@ -182,7 +206,7 @@ class DNSResolver:
         last_error = None
         for server in available_servers:
             try:
-                response = await self._query_server(
+                response = await self._query_server_pooled(
                     server.address, server.port, question, server.timeout
                 )
 
@@ -211,19 +235,32 @@ class DNSResolver:
         logger.warning(
             "All upstream servers failed, falling back to recursive resolution"
         )
+        if self.performance_monitor:
+            self.performance_monitor.record_error("all_upstream_servers_failed")
         return await self._recursive_resolve(question, context)
 
+    @timing_decorator("recursive_resolution", None)
     async def _recursive_resolve(
         self, question: DNSQuestion, context: QueryContext
     ) -> DNSMessage:
         """Perform recursive DNS resolution starting from root servers"""
+        # Set up timing decorator with current performance monitor
+        if self.performance_monitor:
+            timing_decorator.__defaults__ = (
+                "recursive_resolution",
+                self.performance_monitor,
+            )
 
         if context.is_expired():
             logger.warning(f"Query for {question.name} timed out")
+            if self.performance_monitor:
+                self.performance_monitor.record_error("recursive_resolution_timeout")
             return self._create_error_response(question, DNSResponseCode.SERVFAIL)
 
         if not context.can_recurse():
             logger.warning(f"Maximum recursion depth reached for {question.name}")
+            if self.performance_monitor:
+                self.performance_monitor.record_error("max_recursion_depth_reached")
             return self._create_error_response(question, DNSResponseCode.SERVFAIL)
 
         # Start with root servers
@@ -239,7 +276,7 @@ class DNSResolver:
                 context.visited_servers.add(ns_ip)
 
                 try:
-                    response = await self._query_server(ns_ip, 53, question, 5.0)
+                    response = await self._query_server_pooled(ns_ip, 53, question, 5.0)
 
                     # Check response code
                     if response.header.rcode == DNSResponseCode.NOERROR:
@@ -308,12 +345,96 @@ class DNSResolver:
             break
 
         # Resolution failed
+        if self.performance_monitor:
+            self.performance_monitor.record_error("recursive_resolution_failed")
         return self._create_error_response(question, DNSResponseCode.SERVFAIL)
+
+    async def _query_server_pooled(
+        self, server_ip: str, port: int, question: DNSQuestion, timeout: float
+    ) -> DNSMessage:
+        """Send a DNS query to a specific server using connection pool"""
+        start_time = time.time()
+
+        try:
+            # Get connection from pool
+            async with await connection_pool.get_connection(server_ip, port) as conn:
+                response = await self._send_query_with_connection(
+                    conn, question, timeout
+                )
+
+                query_time = time.time() - start_time
+                if self.performance_monitor:
+                    self.performance_monitor.record_operation_time(
+                        "dns_query", query_time
+                    )
+
+                return response
+
+        except Exception as e:
+            query_time = time.time() - start_time
+            if self.performance_monitor:
+                self.performance_monitor.record_operation_time(
+                    "dns_query_failed", query_time
+                )
+                self.performance_monitor.record_error("dns_query_failed")
+            raise e
+
+    async def _send_query_with_connection(
+        self, connection, question: DNSQuestion, timeout: float
+    ) -> DNSMessage:
+        """Send query using pooled connection"""
+        # Create query message
+        self._transaction_counter = (self._transaction_counter + 1) % 65536
+        header = DNSHeader(
+            transaction_id=self._transaction_counter,
+            flags=0,
+            qr=False,
+            rd=True,  # Recursion desired
+            question_count=1,
+        )
+
+        query = DNSMessage(
+            header=header, questions=[question], answers=[], authority=[], additional=[]
+        )
+
+        query_data = query.to_bytes()
+
+        # Send UDP query using pooled socket
+        try:
+            sock = connection["socket"]
+            server = connection["server"]
+            port = connection["port"]
+
+            # Set socket timeout
+            loop = asyncio.get_running_loop()
+
+            # Send data
+            await loop.sock_sendto(sock, query_data, (server, port))
+
+            # Receive response with timeout
+            try:
+                response_data = await asyncio.wait_for(
+                    loop.sock_recv(sock, 4096), timeout=timeout
+                )
+            except asyncio.TimeoutError:
+                raise TimeoutError(f"Query to {server}:{port} timed out")
+
+            # Parse response
+            response = DNSMessage.from_bytes(response_data)
+
+            # Verify transaction ID matches
+            if response.header.transaction_id != header.transaction_id:
+                raise ValueError("Transaction ID mismatch")
+
+            return response
+
+        except Exception as e:
+            raise e
 
     async def _query_server(
         self, server_ip: str, port: int, question: DNSQuestion, timeout: float
     ) -> DNSMessage:
-        """Send a DNS query to a specific server"""
+        """Send a DNS query to a specific server (fallback without pooling)"""
 
         # Create query message
         self._transaction_counter = (self._transaction_counter + 1) % 65536
@@ -375,8 +496,16 @@ class DNSResolver:
             header=header, questions=[question], answers=[], authority=[], additional=[]
         )
 
+    @timing_decorator("upstream_health_check", None)
     async def health_check(self) -> Dict[str, any]:
         """Check health of upstream servers and resolver"""
+        # Set up timing decorator with current performance monitor
+        if self.performance_monitor:
+            timing_decorator.__defaults__ = (
+                "upstream_health_check",
+                self.performance_monitor,
+            )
+
         health_info = {
             "status": "healthy",
             "upstream_servers": [],
@@ -395,7 +524,7 @@ class DNSResolver:
             # Test connectivity
             try:
                 test_question = DNSQuestion("google.com.", DNSRecordType.A, DNSClass.IN)
-                response = await self._query_server(
+                response = await self._query_server_pooled(
                     server.address, server.port, test_question, 3.0
                 )
                 server_health["responsive"] = True
@@ -410,7 +539,7 @@ class DNSResolver:
         try:
             root_server = random.choice(self.ROOT_SERVERS)
             test_question = DNSQuestion(".", DNSRecordType.NS, DNSClass.IN)
-            await self._query_server(root_server, 53, test_question, 5.0)
+            await self._query_server_pooled(root_server, 53, test_question, 5.0)
             health_info["root_servers_accessible"] = True
         except Exception:
             health_info["root_servers_accessible"] = False

@@ -10,6 +10,7 @@ prometheus-client>=0.16.0
 structlog>=22.3.0
 click>=8.1.0    # For CLI interface
 watchdog>=3.0.0  # For configuration hot reload
+psutil>=5.9.0  # For performance monitoring and memory tracking
 
 # Development and testing dependencies
 pytest>=7.2.0

@@ -8,6 +8,12 @@ server:
   web_port: 8080
   workers: 4
 
+  # Performance Optimization Settings
+  max_concurrent_requests: 1000    # Maximum concurrent DNS requests
+  request_queue_size: 5000         # Maximum request queue size for backpressure
+  max_upstream_connections: 100    # Maximum upstream connection pool size
+  connection_timeout: 30.0         # Connection timeout in seconds
+
 # Upstream DNS Servers
 # These servers will be used for forwarding queries when recursive resolution is needed
 upstream_servers:
@@ -53,15 +59,29 @@ resolution:
 
 # Performance Configuration
 performance:
-  max_concurrent_queries: 1000    # Maximum concurrent queries
-  connection_timeout: 30          # Connection timeout in seconds
+  max_concurrent_queries: 1000    # Maximum concurrent queries (deprecated - use server.max_concurrent_requests)
+  connection_timeout: 30          # Connection timeout in seconds (deprecated - use server.connection_timeout)
   buffer_size: 8192              # Buffer size for network operations
+
+  # Memory Management
+  memory_monitoring_enabled: true  # Enable memory usage monitoring
+  memory_warning_threshold_mb: 1000  # Memory usage warning threshold
+  memory_cleanup_interval: 300    # Memory cleanup interval in seconds
+
+  # Connection Pool Settings
+  connection_pool_enabled: true   # Enable connection pooling
+  connection_pool_cleanup_interval: 60  # Cleanup interval for old connections
 
 # Monitoring Configuration
 monitoring:
   health_check_enabled: true      # Enable health check endpoint
   metrics_enabled: true           # Enable Prometheus metrics
   alerts_enabled: false           # Enable alerting (requires configuration)
+
+  # Performance Monitoring
+  performance_monitoring_enabled: true  # Enable detailed performance monitoring
+  performance_monitoring_interval: 5.0  # Monitoring collection interval in seconds
+  performance_history_size: 1000        # Number of performance samples to keep
 
 # Time Configuration
 time:

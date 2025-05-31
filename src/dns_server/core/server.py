@@ -7,6 +7,7 @@ This module implements the main DNS server functionality including:
 - Request routing and response handling
 - Error handling and malformed packet rejection
 - Performance monitoring and metrics
+- Concurrency limiting and backpressure handling
 """
 
 import asyncio
@@ -26,6 +27,7 @@ from .message import (
     DNSRecordType,
     DNSResponseCode,
 )
+from .performance import PerformanceMonitor, concurrency_limiter, timing_decorator
 from .resolver import DNSResolver, IterativeResolver
 
 logger = logging.getLogger(__name__)
@@ -85,11 +87,21 @@ class DNSUDPProtocol(asyncio.DatagramProtocol):
         task.add_done_callback(self.server._background_tasks.discard)
 
     async def _handle_request(self, data: bytes, client_ip: str, addr: Tuple[str, int]):
-        """Process DNS query and send response"""
+        """Process DNS query and send response with concurrency limiting"""
         try:
-            response_data = await self.server.handle_dns_request(data, client_ip, "UDP")
-            if response_data:
-                self.transport.sendto(response_data, addr)
+            # Apply concurrency limiting
+            async with await concurrency_limiter.acquire():
+                response_data = await self.server.handle_dns_request(
+                    data, client_ip, "UDP"
+                )
+                if response_data:
+                    self.transport.sendto(response_data, addr)
+        except RuntimeError as e:
+            # Handle backpressure (queue full, etc.)
+            logger.warning(
+                f"Request from {client_ip} rejected due to backpressure: {e}"
+            )
+            # Don't send response for rejected requests
         except Exception as e:
             logger.error(f"Error handling UDP request from {client_ip}: {e}")
 
@@ -106,6 +118,7 @@ class DNSServer:
         self.resolver = DNSResolver(config)
         self.iterative_resolver = IterativeResolver(self.resolver)
         self.cache = None  # Will be set externally
+        self.performance_monitor = None  # Will be set externally
 
         # Server state
         self._udp_server = None
@@ -132,6 +145,11 @@ class DNSServer:
         """Set the cache instance"""
         self.cache = cache
         self.resolver.set_cache(cache)
+
+    def set_performance_monitor(self, monitor: PerformanceMonitor):
+        """Set the performance monitor"""
+        self.performance_monitor = monitor
+        self.resolver.set_performance_monitor(monitor)
 
     async def start(self) -> None:
         """Start the DNS server (UDP and TCP)"""
@@ -193,10 +211,26 @@ class DNSServer:
     async def _handle_tcp_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
-        """Handle TCP DNS client connection"""
+        """Handle TCP DNS client connection with concurrency limiting"""
         client_addr = writer.get_extra_info("peername")
         client_ip = client_addr[0] if client_addr else "unknown"
 
+        try:
+            # Apply concurrency limiting for TCP connections
+            async with await concurrency_limiter.acquire():
+                await self._process_tcp_connection(reader, writer, client_ip)
+        except RuntimeError as e:
+            logger.warning(
+                f"TCP connection from {client_ip} rejected due to backpressure: {e}"
+            )
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    async def _process_tcp_connection(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, client_ip: str
+    ):
+        """Process TCP connection messages"""
         try:
             while True:
                 # Read message length (2 bytes, network byte order)
@@ -228,16 +262,21 @@ class DNSServer:
             pass
         except Exception as e:
             logger.error(f"TCP client error for {client_ip}: {e}")
-        finally:
-            writer.close()
-            await writer.wait_closed()
 
+    @timing_decorator("dns_request_handling", None)  # Will be set dynamically
     async def handle_dns_request(
         self, data: bytes, client_ip: str, protocol: str
     ) -> Optional[bytes]:
         """
         Main DNS request handler for both UDP and TCP
         """
+        # Set up timing decorator with current performance monitor
+        if self.performance_monitor:
+            timing_decorator.__defaults__ = (
+                "dns_request_handling",
+                self.performance_monitor,
+            )
+
         start_time = time.time()
         request_metrics = None
         response_metrics = None
@@ -249,12 +288,16 @@ class DNSServer:
             except Exception as e:
                 logger.warning(f"Malformed DNS packet from {client_ip}: {e}")
                 self._stats["errors"] += 1
+                if self.performance_monitor:
+                    self.performance_monitor.record_error("malformed_packet")
                 return self._create_format_error_response(data)
 
             # Validate query
             if not query.is_query() or not query.questions:
                 logger.warning(f"Invalid DNS query from {client_ip}")
                 self._stats["errors"] += 1
+                if self.performance_monitor:
+                    self.performance_monitor.record_error("invalid_query")
                 return self._create_format_error_response(data)
 
             # Get the first question
@@ -280,6 +323,8 @@ class DNSServer:
             # Check rate limiting
             if not self._check_rate_limit(client_ip):
                 logger.warning(f"Rate limit exceeded for {client_ip}")
+                if self.performance_monitor:
+                    self.performance_monitor.record_error("rate_limit_exceeded")
                 response = query.create_response(DNSResponseCode.REFUSED)
                 response.header.transaction_id = query.header.transaction_id
                 return response.to_bytes()
@@ -323,6 +368,8 @@ class DNSServer:
 
             except Exception as e:
                 logger.error(f"Resolution failed for {question.name}: {e}")
+                if self.performance_monitor:
+                    self.performance_monitor.record_error("resolution_failed")
                 response = query.create_response(DNSResponseCode.SERVFAIL)
                 response.header.transaction_id = query.header.transaction_id
                 response.header.ra = recursion_available
@@ -357,6 +404,8 @@ class DNSServer:
         except Exception as e:
             logger.error(f"Unexpected error handling request from {client_ip}: {e}")
             self._stats["errors"] += 1
+            if self.performance_monitor:
+                self.performance_monitor.record_error("unexpected_error")
 
             # Try to create a SERVFAIL response
             try:
@@ -497,7 +546,7 @@ class DNSServer:
             sum(response_times) / len(response_times) if response_times else 0
         )
 
-        return {
+        stats = {
             "uptime_seconds": round(uptime, 2),
             "total_queries": self._stats["total_queries"],
             "udp_queries": self._stats["udp_queries"],
@@ -514,6 +563,12 @@ class DNSServer:
             "is_running": self._is_running,
         }
 
+        # Add performance monitoring stats if available
+        if self.performance_monitor:
+            stats["performance"] = self.performance_monitor.get_stats()
+
+        return stats
+
     async def health_check(self) -> Dict[str, Any]:
         """Comprehensive health check"""
         health = {
@@ -526,6 +581,20 @@ class DNSServer:
             if self.cache
             else {"status": "unavailable"},
         }
+
+        # Add performance monitoring health if available
+        if self.performance_monitor:
+            perf_stats = self.performance_monitor.get_stats()
+            health["performance"] = perf_stats
+
+            # Check for performance issues
+            memory_stats = perf_stats.get("memory", {})
+            current_memory = memory_stats.get("current_mb", 0)
+
+            if current_memory > 1000:  # > 1GB
+                health["status"] = "degraded"
+                health["warnings"] = health.get("warnings", [])
+                health["warnings"].append(f"High memory usage: {current_memory:.1f} MB")
 
         # Determine overall health
         if not self._is_running:
