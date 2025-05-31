@@ -1,0 +1,69 @@
+# DNS Server Default Configuration
+# This file contains sensible defaults for all configuration parameters
+
+# Server Configuration
+server:
+  bind_address: "127.0.0.1"
+  dns_port: 5353  # Non-privileged port for development
+  web_port: 8080
+  workers: 4
+
+# Upstream DNS Servers
+# These servers will be used for forwarding queries when recursive resolution is needed
+upstream_servers:
+  - "8.8.8.8"        # Google DNS Primary
+  - "1.1.1.1"        # Cloudflare DNS Primary
+  - "208.67.222.222" # OpenDNS Primary
+
+# Cache Configuration
+cache:
+  max_size_mb: 100     # Maximum cache size in megabytes
+  default_ttl: 300     # Default TTL in seconds (5 minutes)
+  min_ttl: 1           # Minimum TTL in seconds
+  max_ttl: 86400       # Maximum TTL in seconds (24 hours)
+  negative_ttl: 300    # TTL for negative cache entries (NXDOMAIN, etc.)
+
+# Logging Configuration
+logging:
+  level: "INFO"                    # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  format: "json"                   # Log format (json, text)
+  file: "logs/dns-server.log"      # Log file path
+  max_size_mb: 50                  # Maximum log file size before rotation
+  backup_count: 5                  # Number of backup log files to keep
+
+# Security Configuration
+security:
+  rate_limit_per_ip: 100           # Maximum queries per IP per minute
+  allowed_networks: ["0.0.0.0/0"]  # Allowed networks in CIDR notation
+  blacklist_enabled: true          # Enable domain blacklisting
+
+# Web Interface Configuration
+web:
+  enabled: true              # Enable web interface
+  real_time_updates: true    # Enable real-time updates via WebSocket
+  history_limit: 1000        # Number of queries to keep in history
+
+# DNS Resolution Configuration
+resolution:
+  query_timeout: 5           # Query timeout in seconds
+  retry_attempts: 3          # Number of retry attempts for failed queries
+  retry_interval: 1          # Interval between retries in seconds
+  recursive_enabled: true    # Enable recursive resolution
+  iterative_enabled: true    # Enable iterative resolution
+
+# Performance Configuration
+performance:
+  max_concurrent_queries: 1000    # Maximum concurrent queries
+  connection_timeout: 30          # Connection timeout in seconds
+  buffer_size: 8192              # Buffer size for network operations
+
+# Monitoring Configuration
+monitoring:
+  health_check_enabled: true      # Enable health check endpoint
+  metrics_enabled: true           # Enable Prometheus metrics
+  alerts_enabled: false           # Enable alerting (requires configuration)
+
+# Time Configuration
+time:
+  proactive_refresh_enabled: true # Enable proactive cache refresh
+  refresh_threshold: 0.8          # Refresh when TTL reaches 80% of expiration
