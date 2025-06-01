@@ -1,6 +1,6 @@
 # DNS Server
 
-A high-performance, configurable DNS server with web interface and advanced caching capabilities.
+A high-performance, configurable DNS server with real-time web interface and advanced caching capabilities.
 
 ## Quick Start
 
@@ -20,7 +20,7 @@ python src/dns_server/main.py
 ```
 
 The server will start on:
-- **DNS queries**: `127.0.0.1:9953`
+- **DNS queries**: `127.0.0.1:5353`
 - **Web interface**: `http://127.0.0.1:8080`
 
 ## Configuration
@@ -36,11 +36,12 @@ python src/dns_server/main.py --config /path/to/your/config.yaml
 
 The server uses `config/default.yaml` by default. Key settings you can modify:
 
-- **DNS Port**: Change `server.dns_port` (default: 9953)
+- **DNS Port**: Change `server.dns_port` (default: 5353)
 - **Web Port**: Change `server.web_port` (default: 8080)
 - **Upstream Servers**: Modify `upstream_servers` list
 - **Cache Size**: Adjust `cache.max_size_mb`
 - **Bind Address**: Change `server.bind_address`
+- **Web Interface**: Enable/disable with `web.enabled`
 
 ## Command Examples
 
@@ -66,19 +67,53 @@ Once the server is running, test it with `dig` or `nslookup`:
 
 ```bash
 # Using dig
-dig @127.0.0.1 -p 9953 google.com
+dig @127.0.0.1 -p 5353 google.com
 
 # Using nslookup
-nslookup google.com 127.0.0.1:9953
+nslookup google.com 127.0.0.1
 ```
 
 ## Web Interface
 
-Access the web interface at `http://127.0.0.1:8080` to:
-- Monitor DNS queries in real-time
-- View performance metrics
-- Check cache status
-- See query history
+Access the comprehensive web interface at `http://127.0.0.1:8080` for:
+
+### Real-Time Monitoring
+- Live DNS query feed with real-time updates via WebSocket
+- Server status and uptime monitoring
+- Connection status indicators
+- Automatic refresh with manual refresh option
+
+### Performance Analytics
+- **Interactive Charts**: Query type distribution, cache hit/miss ratios, response time trends
+- **DNS Statistics**: Total queries, UDP/TCP breakdown, error counts, queries per second
+- **Cache Performance**: Hit ratios, memory usage, entry counts
+- **System Metrics**: Memory usage, CPU statistics, connection counts
+
+### Cache Management
+- **Flush Operations**: Remove expired cache entries
+- **Clear Cache**: Remove all cached entries with confirmation
+- **Domain-Specific Flush**: Target specific domains for cache removal
+- **Real-time Cache Statistics**: Current size, hit ratios, memory usage
+
+### Query Analysis
+- **Searchable Query History**: Filter by domain, IP, query type, or response code
+- **Detailed Query Information**: Timestamps, client IPs, response times, cache status
+- **Auto-scroll**: Automatically follow new queries as they arrive
+- **Export Capability**: Download query data for analysis
+
+### User Experience Features
+- **Dark/Light Theme**: Toggle between themes with persistent preference
+- **Responsive Design**: Works on desktop, tablet, and mobile devices
+- **Toast Notifications**: Real-time feedback for actions and events
+- **Keyboard Navigation**: Full keyboard accessibility support
+
+### API Access
+The web interface also exposes REST API endpoints:
+- `GET /api/status` - Server status and comprehensive statistics
+- `GET /api/cache/stats` - Detailed cache performance metrics
+- `POST /api/cache/flush` - Flush cache operations
+- `GET /api/logs` - Query log history with filtering
+- `GET /metrics` - Prometheus-compatible metrics
 
 ## Performance Testing
 
@@ -90,23 +125,50 @@ python test_performance.py
 ## Features
 
 - **High Performance**: Optimized with uvloop and connection pooling
-- **Caching**: Intelligent DNS response caching
-- **Web Interface**: Real-time monitoring and statistics
-- **Security**: Rate limiting and network filtering
-- **Monitoring**: Built-in health checks and performance metrics
-- **Flexible**: Configurable upstream servers and resolution modes
+- **Advanced Caching**: Intelligent DNS response caching with TTL management
+- **Real-Time Web Interface**: Modern dashboard with live updates and analytics
+- **Security**: Rate limiting, network filtering, and access controls
+- **Comprehensive Monitoring**: Built-in health checks, performance metrics, and alerting
+- **Flexible Configuration**: Configurable upstream servers, resolution modes, and all parameters
+- **API Integration**: REST API and WebSocket support for custom integrations
+- **Production Ready**: Structured logging, graceful shutdown, and error handling
 
 ## Stopping the Server
 
-Stop the server with `Ctrl+C` or send a SIGTERM signal.
+Stop the server gracefully with `Ctrl+C` or send a SIGTERM signal. The server will:
+- Complete ongoing DNS requests
+- Save cache state (if persistence is enabled)
+- Close all connections properly
+- Stop background tasks cleanly
 
 ## Common Use Cases
 
 ### Development DNS Server
-Use as a local DNS server for development with custom configurations.
+Use as a local DNS server for development with custom configurations and real-time monitoring.
 
-### DNS Proxy
-Forward DNS queries to multiple upstream servers with caching.
+### DNS Proxy with Analytics
+Forward DNS queries to multiple upstream servers with intelligent caching and comprehensive analytics.
 
-### Performance Testing
-Benchmark DNS resolution performance with built-in monitoring tools.
+### Performance Testing and Monitoring
+Benchmark DNS resolution performance with built-in monitoring tools and real-time dashboards.
+
+### Network Troubleshooting
+Monitor DNS traffic patterns, identify slow queries, and analyze cache effectiveness.
+
+## Troubleshooting
+
+### Web Interface Not Loading
+- Check that the web port (default 8080) is not in use by another application
+- Verify the web interface is enabled in configuration (`web.enabled: true`)
+- Check firewall settings if accessing from another machine
+
+### DNS Queries Not Working
+- Ensure the DNS port (default 5353) is accessible
+- Check upstream server connectivity
+- Verify network configuration and routing
+
+### Performance Issues
+- Monitor cache hit ratios in the web interface
+- Check system resource usage
+- Review upstream server response times
+- Consider adjusting cache size and TTL settings

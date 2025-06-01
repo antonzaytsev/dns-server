@@ -37,6 +37,7 @@ from dns_server.dns_logging import (
     start_log_management,
     stop_log_management,
 )
+from dns_server.web import WebServer
 
 
 class DNSServerApp:
@@ -46,6 +47,7 @@ class DNSServerApp:
         self.config_path = config_path or "config/default.yaml"
         self.config = None
         self.dns_server = None
+        self.web_server = None
         self.cache = None
         self._shutdown_event = asyncio.Event()
         self.logger = None
@@ -84,6 +86,19 @@ class DNSServerApp:
             # Set performance monitoring on DNS server
             self.dns_server.set_performance_monitor(performance_monitor)
 
+            # Create web server if enabled
+            web_config = getattr(self.config, "web", None)
+            if web_config and getattr(web_config, "enabled", True):
+                # Create web config that includes server settings
+                web_server_config = type('WebServerConfig', (), {
+                    'bind_address': self.config.server.bind_address,
+                    'port': self.config.server.web_port,
+                    'debug': False,
+                    **vars(web_config)
+                })()
+                
+                self.web_server = WebServer(web_server_config, self)
+
             self.logger.info(
                 "DNS server application initialized",
                 cache_size_mb=getattr(cache_config, "max_size_mb", 100)
@@ -91,6 +106,7 @@ class DNSServerApp:
                 else 100,
                 dns_port=self.config.server.dns_port,
                 web_port=self.config.server.web_port,
+                web_enabled=web_config and getattr(web_config, "enabled", True),
                 workers=self.config.server.workers,
             )
 
@@ -166,11 +182,17 @@ class DNSServerApp:
 
         try:
             await self.dns_server.start()
+            
+            # Start web server if enabled
+            if self.web_server:
+                await self.web_server.start()
+            
             self.logger.info(
                 "DNS server started successfully",
                 bind_address=self.config.server.bind_address,
                 dns_port=self.config.server.dns_port,
                 web_port=self.config.server.web_port,
+                web_enabled=self.web_server is not None,
             )
 
             # Setup signal handlers
@@ -213,6 +235,11 @@ class DNSServerApp:
         """Stop the DNS server"""
         self.logger.info("Shutting down DNS server")
 
+        # Stop web server first
+        if self.web_server:
+            await self.web_server.stop()
+            self.logger.info("Web server stopped")
+
         if self.dns_server:
             await self.dns_server.stop()
             self.logger.info("DNS server stopped")
@@ -235,6 +262,8 @@ class DNSServerApp:
 
     async def health_check(self):
         """Perform health check"""
+        health = {"status": "not_running"}
+        
         if self.dns_server:
             health = await self.dns_server.health_check()
             # Add performance metrics to health check
@@ -247,8 +276,11 @@ class DNSServerApp:
             if log_manager:
                 health["logging"] = log_manager.get_log_stats()
 
-            return health
-        return {"status": "not_running"}
+            # Add web server health if available
+            if self.web_server:
+                health["web"] = await self.web_server.health_check()
+
+        return health
 
 
 async def main():
@@ -282,6 +314,8 @@ async def main():
                 print(f"Performance stats: {health['performance']}")
             if "logging" in health:
                 print(f"Logging stats: {health['logging']}")
+            if "web" in health:
+                print(f"Web server health: {health['web']}")
             sys.exit(0 if health["status"] == "healthy" else 1)
         except Exception as e:
             print(f"Health check failed: {e}")
