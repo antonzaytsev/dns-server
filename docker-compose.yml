@@ -10,8 +10,8 @@ services:
 
     # Port mappings
     ports:
-      - "5353:5353/udp"    # DNS port (UDP)
-      - "5353:5353/tcp"    # DNS port (TCP)
+      - "9953:9953/udp"    # DNS port (UDP)
+      - "9953:9953/tcp"    # DNS port (TCP)
       - "8080:8080/tcp"    # Web interface port
 
     # Volume mounts

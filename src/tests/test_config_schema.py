@@ -59,10 +59,10 @@ class TestServerConfig:
     def test_valid_server_config(self):
         """Test valid server configuration."""
         config = ServerConfig(
-            bind_address="127.0.0.1", dns_port=5353, web_port=8080, workers=4
+            bind_address="127.0.0.1", dns_port=9953, web_port=8080, workers=4
         )
         assert config.bind_address == "127.0.0.1"
-        assert config.dns_port == 5353
+        assert config.dns_port == 9953
 
     def test_invalid_bind_address(self):
         """Test invalid bind address."""

@@ -257,7 +257,7 @@ class ConfigLoader:
         """Apply environment variable overrides to configuration.
 
         Environment variables use the format DNS_SERVER_<SECTION>_<KEY>
-        For example: DNS_SERVER_SERVER_DNS_PORT=5353
+        For example: DNS_SERVER_SERVER_DNS_PORT=9953
 
         Args:
             config_dict: Base configuration dictionary

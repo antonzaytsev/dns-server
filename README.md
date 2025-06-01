@@ -94,7 +94,7 @@ docker-compose pull && docker-compose up -d  # Update and restart
 ## Server Access
 
 When running, the DNS server is accessible at:
-- **DNS queries**: `127.0.0.1:5353` (UDP/TCP)
+- **DNS queries**: `127.0.0.1:9953` (UDP/TCP)
 - **Web interface**: `http://127.0.0.1:8080`
 
 ## Configuration
@@ -103,7 +103,7 @@ When running, the DNS server is accessible at:
 
 Edit `config/default.yaml` to customize server settings:
 
-- **DNS Port**: Change `server.dns_port` (default: 5353)
+- **DNS Port**: Change `server.dns_port` (default: 9953)
 - **Web Port**: Change `server.web_port` (default: 8080)
 - **Upstream Servers**: Modify `upstream_servers` list
 - **Cache Size**: Adjust `cache.max_size_mb`
@@ -125,7 +125,7 @@ Once the server is running, test it with `dig` or `nslookup`:
 
 ```bash
 # Using dig
-dig @127.0.0.1 -p 5353 google.com
+dig @127.0.0.1 -p 9953 google.com
 
 # Using nslookup
 nslookup google.com 127.0.0.1
@@ -169,7 +169,7 @@ Build and run with custom settings:
 docker build -t dns-server .
 
 # Run with custom ports
-docker run -p 5353:5353/udp -p 5353:5353/tcp -p 8080:8080 dns-server
+docker run -p 9953:9953/udp -p 9953:9953/tcp -p 8080:8080 dns-server
 
 # Run with custom config volume
 docker run -v $(pwd)/config:/app/config dns-server
@@ -251,7 +251,7 @@ Monitor DNS traffic patterns, identify slow queries, and analyze cache effective
 - **Virtual environment missing**: Run setup commands in Quick Start
 
 ### Docker Issues
-- **Port conflicts**: Check if ports 5353 or 8080 are already in use
+- **Port conflicts**: Check if ports 9953 or 8080 are already in use
 - **Permission denied**: Ensure Docker daemon is running and user has permissions
 - **Build failures**: Check Dockerfile and ensure all files are present
 
@@ -261,7 +261,7 @@ Monitor DNS traffic patterns, identify slow queries, and analyze cache effective
 - Check firewall settings if accessing from another machine
 
 ### DNS Queries Not Working
-- Ensure the DNS port (default 5353) is accessible
+- Ensure the DNS port (default 9953) is accessible
 - Check upstream server connectivity
 - Verify network configuration and routing
 

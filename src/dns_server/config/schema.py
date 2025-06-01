@@ -43,7 +43,7 @@ class ServerConfig:
     """Server configuration section."""
 
     bind_address: str = "127.0.0.1"
-    dns_port: int = 5353
+    dns_port: int = 9953
     web_port: int = 8080
     workers: int = 4
 

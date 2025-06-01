@@ -184,7 +184,7 @@ class DNSServer:
         self._stats["start_time"] = time.time()
 
         bind_address = getattr(self.config.server, "bind_address", "127.0.0.1")
-        dns_port = getattr(self.config.server, "dns_port", 5353)
+        dns_port = getattr(self.config.server, "dns_port", 9953)
 
         try:
             # Start UDP server

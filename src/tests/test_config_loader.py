@@ -21,7 +21,7 @@ class TestConfigLoader:
 
         assert isinstance(config, DNSConfig)
         assert config.server.bind_address == "127.0.0.1"
-        assert config.server.dns_port == 5353
+        assert config.server.dns_port == 9953
         assert len(config.upstream_servers) == 3
 
     def test_load_yaml_config(self):
@@ -65,7 +65,7 @@ logging:
     def test_load_json_config(self):
         """Test loading configuration from JSON file."""
         json_content = {
-            "server": {"bind_address": "192.168.1.1", "dns_port": 5353, "workers": 8},
+            "server": {"bind_address": "192.168.1.1", "dns_port": 9953, "workers": 8},
             "cache": {"max_size_mb": 50, "min_ttl": 5},
         }
 
@@ -143,7 +143,7 @@ logging:
         """Test environment variable overrides."""
         # Set environment variables
         env_vars = {
-            "DNS_SERVER_SERVER_DNS_PORT": "9999",
+            "DNS_SERVER_SERVER_DNS_PORT": "9953",
             "DNS_SERVER_SERVER_BIND_ADDRESS": "10.0.0.1",
             "DNS_SERVER_CACHE_MAX_SIZE_MB": "500",
             "DNS_SERVER_LOGGING_LEVEL": "ERROR",
@@ -161,7 +161,7 @@ logging:
             loader = ConfigLoader(enable_hot_reload=False)
             config = loader.load_config()
 
-            assert config.server.dns_port == 9999
+            assert config.server.dns_port == 9953
             assert config.server.bind_address == "10.0.0.1"
             assert config.cache.max_size_mb == 500
             assert config.logging.level == "ERROR"
@@ -179,7 +179,7 @@ logging:
     def test_environment_value_conversion(self):
         """Test conversion of environment variable values to proper types."""
         env_vars = {
-            "DNS_SERVER_SERVER_DNS_PORT": "5353",  # Should become int
+            "DNS_SERVER_SERVER_DNS_PORT": "9953",  # Should become int
             "DNS_SERVER_SERVER_WEB_PORT": "8080",  # Different from DNS port
             "DNS_SERVER_WEB_ENABLED": "true",  # Should become bool
             "DNS_SERVER_SECURITY_BLACKLIST_ENABLED": "false",  # Should become bool
@@ -195,7 +195,7 @@ logging:
             loader = ConfigLoader(enable_hot_reload=False)
             config = loader.load_config()
 
-            assert config.server.dns_port == 5353
+            assert config.server.dns_port == 9953
             assert isinstance(config.server.dns_port, int)
             assert config.server.web_port == 8080
             assert isinstance(config.server.web_port, int)

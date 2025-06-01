@@ -79,7 +79,7 @@ This document provides a detailed step-by-step implementation plan for building 
      ```yaml
      server:
        bind_address: "127.0.0.1"
-       dns_port: 5353  # Non-privileged port for development
+       dns_port: 9953  # Non-privileged port for development
        web_port: 8080
        workers: 4
 
@@ -496,8 +496,8 @@ services:
     container_name: dns-server
     restart: unless-stopped
     ports:
-      - "5353:5353/udp"    # DNS port (UDP)
-      - "5353:5353/tcp"    # DNS port (TCP)
+      - "9953:9953/udp"    # DNS port (UDP)
+      - "9953:9953/tcp"    # DNS port (TCP)
       - "8080:8080/tcp"    # Web interface port
     volumes:
       - ./config:/app/config:ro
