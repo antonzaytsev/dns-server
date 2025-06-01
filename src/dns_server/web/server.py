@@ -16,7 +16,7 @@ from aiohttp import web, web_ws
 from aiohttp.web import Application
 
 from ..config.schema import WebConfig
-from ..dns_logging import get_logger
+from ..dns_logging import get_logger, log_exception
 from .api import setup_api_routes
 from .websocket import WebSocketManager
 
@@ -76,7 +76,8 @@ class WebServer:
         static_dir = current_dir / "web"
 
         if static_dir.exists():
-            app.router.add_static("/", path=static_dir, name="static")
+            # Serve static files under /static/ path instead of root to avoid conflicts
+            app.router.add_static("/static", path=static_dir, name="static")
             self.logger.info("Static files configured", path=str(static_dir))
         else:
             self.logger.warning(
@@ -94,7 +95,38 @@ class WebServer:
                     content_type="text/html",
                 )
 
+        # Add specific handler for root path
         app.router.add_get("/", index_handler)
+
+        # Also handle common static file requests directly
+        async def favicon_handler(request):
+            favicon_file = static_dir / "favicon.ico"
+            if favicon_file.exists():
+                return web.FileResponse(favicon_file)
+            else:
+                return web.Response(status=404)
+
+        app.router.add_get("/favicon.ico", favicon_handler)
+
+        # Add handlers for CSS and JS files
+        async def css_handler(request):
+            filename = request.match_info["filename"]
+            css_file = static_dir / "css" / filename
+            if css_file.exists() and css_file.suffix == ".css":
+                return web.FileResponse(css_file)
+            else:
+                return web.Response(status=404)
+
+        async def js_handler(request):
+            filename = request.match_info["filename"]
+            js_file = static_dir / "js" / filename
+            if js_file.exists() and js_file.suffix == ".js":
+                return web.FileResponse(js_file)
+            else:
+                return web.Response(status=404)
+
+        app.router.add_get("/css/{filename}", css_handler)
+        app.router.add_get("/js/{filename}", js_handler)
 
     def _setup_cors(self, app: Application):
         """Setup CORS for development."""
@@ -133,7 +165,7 @@ class WebServer:
     def _create_logging_middleware(self):
         """Create logging middleware."""
         logger = self.logger
-        
+
         @web.middleware
         async def logging_middleware(request, handler):
             """Log HTTP requests."""
@@ -154,26 +186,31 @@ class WebServer:
 
                 return response
 
-            except Exception:
+            except Exception as exc:
                 process_time = asyncio.get_event_loop().time() - start_time
 
+                # Use enhanced error logging with detailed traceback
+                log_exception(
+                    logger, f"HTTP request failed: {request.method} {request.path}", exc
+                )
+
+                # Also log basic request info
                 logger.error(
                     "HTTP request failed",
                     method=request.method,
                     path=request.path,
                     remote=request.remote,
-                    error="An error occurred",
                     response_time_ms=round(process_time * 1000, 2),
                 )
                 raise
-        
+
         return logging_middleware
 
     def _create_error_middleware(self):
         """Create error handling middleware."""
         logger = self.logger
         config = self.config
-        
+
         @web.middleware
         async def error_middleware(request, handler):
             """Handle HTTP errors gracefully."""
@@ -183,23 +220,23 @@ class WebServer:
                 # Re-raise HTTP exceptions as they are handled properly by aiohttp
                 raise
             except Exception as ex:
-                logger.error(
-                    "Unhandled error in web server",
-                    method=request.method,
-                    path=request.path,
-                    error=str(ex),
+                # Use enhanced error logging with detailed traceback
+                log_exception(
+                    logger,
+                    f"Unhandled error in web server: {request.method} {request.path}",
+                    ex,
                 )
 
                 return web.json_response(
                     {
                         "error": "Internal server error",
                         "message": str(ex)
-                        if getattr(config, 'debug', False)
+                        if getattr(config, "debug", False)
                         else "An unexpected error occurred",
                     },
                     status=500,
                 )
-        
+
         return error_middleware
 
     async def _websocket_handler(self, request):
