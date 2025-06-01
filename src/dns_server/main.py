@@ -106,9 +106,9 @@ class DNSServerApp:
 
             self.logger.info(
                 "DNS server application initialized",
-                cache_size_mb=getattr(cache_config, "max_size_mb", 100)
-                if cache_config
-                else 100,
+                cache_size_mb=(
+                    getattr(cache_config, "max_size_mb", 100) if cache_config else 100
+                ),
                 dns_port=self.config.server.dns_port,
                 web_port=self.config.server.web_port,
                 web_enabled=web_config and getattr(web_config, "enabled", True),

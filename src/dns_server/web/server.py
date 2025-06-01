@@ -230,9 +230,11 @@ class WebServer:
                 return web.json_response(
                     {
                         "error": "Internal server error",
-                        "message": str(ex)
-                        if getattr(config, "debug", False)
-                        else "An unexpected error occurred",
+                        "message": (
+                            str(ex)
+                            if getattr(config, "debug", False)
+                            else "An unexpected error occurred"
+                        ),
                     },
                     status=500,
                 )

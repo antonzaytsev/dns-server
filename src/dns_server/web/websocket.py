@@ -269,9 +269,11 @@ class WebSocketManager:
             # Get basic status
             status = {
                 "type": "server_status",
-                "status": "running"
-                if dns_app.dns_server and dns_app.dns_server._is_running
-                else "stopped",
+                "status": (
+                    "running"
+                    if dns_app.dns_server and dns_app.dns_server._is_running
+                    else "stopped"
+                ),
                 "timestamp": datetime.utcnow().isoformat() + "Z",
             }
 

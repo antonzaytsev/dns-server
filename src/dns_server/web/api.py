@@ -102,9 +102,11 @@ class APIHandler:
             # Compile comprehensive status
             status = {
                 "server": {
-                    "status": "running"
-                    if dns_app.dns_server and dns_app.dns_server._is_running
-                    else "stopped",
+                    "status": (
+                        "running"
+                        if dns_app.dns_server and dns_app.dns_server._is_running
+                        else "stopped"
+                    ),
                     "uptime_seconds": time.time()
                     - dns_stats.get("start_time", time.time()),
                     "version": "1.0.0",  # TODO: Get from package metadata
@@ -116,9 +118,11 @@ class APIHandler:
                 "performance": performance_stats,
                 "logging": log_stats,
                 "websocket": {
-                    "connected_clients": self.websocket_manager.get_client_count()
-                    if self.websocket_manager
-                    else 0
+                    "connected_clients": (
+                        self.websocket_manager.get_client_count()
+                        if self.websocket_manager
+                        else 0
+                    )
                 },
             }
 

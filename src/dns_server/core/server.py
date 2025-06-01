@@ -668,9 +668,11 @@ class DNSServer:
         health = {
             "status": "healthy" if self._is_running else "stopped",
             "timestamp": time.time(),
-            "uptime_seconds": time.time() - self._stats["start_time"]
-            if self._stats["start_time"]
-            else 0,
+            "uptime_seconds": (
+                time.time() - self._stats["start_time"]
+                if self._stats["start_time"]
+                else 0
+            ),
         }
 
         # Add basic stats
