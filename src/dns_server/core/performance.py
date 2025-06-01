@@ -339,9 +339,23 @@ class ConnectionPool:
         import socket
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setblocking(False)
+        sock.setblocking(False)  # Essential for asyncio operations
+
+        # Set socket options for better performance
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        # Set receive buffer size
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 65536)
+        except OSError:
+            pass  # Ignore if not supported
 
         self._connection_counter += 1
+
+        logger.debug(
+            f"Created new UDP socket connection {self._connection_counter} for {server}:{port}"
+        )
+
         return {
             "id": self._connection_counter,
             "socket": sock,

@@ -352,16 +352,36 @@ class DNSResolver:
         start_time = time.time()
 
         try:
-            # Get connection from pool
-            async with await connection_pool.get_connection(server_ip, port) as conn:
-                response = await self._send_query_with_connection(
-                    conn, question, timeout
+            # Try using connection pool first
+            try:
+                async with await connection_pool.get_connection(
+                    server_ip, port
+                ) as conn:
+                    response = await self._send_query_with_connection(
+                        conn, question, timeout
+                    )
+
+                    query_time = time.time() - start_time
+                    if self.performance_monitor:
+                        self.performance_monitor.record_operation_time(
+                            "dns_query", query_time
+                        )
+
+                    return response
+
+            except Exception as pool_error:
+                # Log the pooled connection error and fall back to direct query
+                logger.debug(
+                    f"Pooled connection failed for {server_ip}:{port}, falling back to direct query: {pool_error}"
                 )
+
+                # Fallback to non-pooled query
+                response = await self._query_server(server_ip, port, question, timeout)
 
                 query_time = time.time() - start_time
                 if self.performance_monitor:
                     self.performance_monitor.record_operation_time(
-                        "dns_query", query_time
+                        "dns_query_fallback", query_time
                     )
 
                 return response
@@ -378,7 +398,7 @@ class DNSResolver:
     async def _send_query_with_connection(
         self, connection, question: DNSQuestion, timeout: float
     ) -> DNSMessage:
-        """Send query using pooled connection"""
+        """Send query using pooled connection - using UDP transport approach"""
         # Create query message
         self._transaction_counter = (self._transaction_counter + 1) % 65536
         header = DNSHeader(
@@ -395,36 +415,70 @@ class DNSResolver:
 
         query_data = query.to_bytes()
 
-        # Send UDP query using pooled socket
+        # Get server info from connection
+        server = connection["server"]
+        port = connection["port"]
+
+        # Use the same UDP transport/protocol approach as fallback for consistency
+        loop = asyncio.get_running_loop()
+
+        # Create future for the response
+        response_future = asyncio.Future()
+
+        class DNSProtocol(asyncio.DatagramProtocol):
+            def __init__(self, future):
+                self.future = future
+
+            def datagram_received(self, data, addr):
+                if not self.future.done():
+                    self.future.set_result(data)
+
+            def error_received(self, exc):
+                if not self.future.done():
+                    self.future.set_exception(exc)
+
         try:
-            sock = connection["socket"]
-            server = connection["server"]
-            port = connection["port"]
+            # Create UDP endpoint
+            transport, protocol = await loop.create_datagram_endpoint(
+                lambda: DNSProtocol(response_future), family=socket.AF_INET
+            )
 
-            # Set socket timeout
-            loop = asyncio.get_running_loop()
-
-            # Send data
-            await loop.sock_sendto(sock, query_data, (server, port))
-
-            # Receive response with timeout
             try:
-                response_data = await asyncio.wait_for(
-                    loop.sock_recv(sock, 4096), timeout=timeout
+                # Send query
+                transport.sendto(query_data, (server, port))
+
+                # Wait for response with timeout
+                try:
+                    response_data = await asyncio.wait_for(
+                        response_future, timeout=timeout
+                    )
+                except asyncio.TimeoutError:
+                    raise TimeoutError(
+                        f"Query to {server}:{port} timed out after {timeout}s"
+                    )
+
+                # Parse response
+                response = DNSMessage.from_bytes(response_data)
+
+                # Verify transaction ID matches
+                if response.header.transaction_id != header.transaction_id:
+                    raise ValueError(
+                        f"Transaction ID mismatch: expected {header.transaction_id}, got {response.header.transaction_id}"
+                    )
+
+                logger.debug(
+                    f"Successful pooled DNS query to {server}:{port} for {question.name}"
                 )
-            except asyncio.TimeoutError:
-                raise TimeoutError(f"Query to {server}:{port} timed out")
+                return response
 
-            # Parse response
-            response = DNSMessage.from_bytes(response_data)
-
-            # Verify transaction ID matches
-            if response.header.transaction_id != header.transaction_id:
-                raise ValueError("Transaction ID mismatch")
-
-            return response
+            finally:
+                transport.close()
 
         except Exception as e:
+            # Log the specific error for debugging
+            logger.error(
+                f"Pooled DNS query failed to {server}:{port}: {type(e).__name__}: {e}"
+            )
             raise e
 
     async def _query_server(
@@ -448,33 +502,65 @@ class DNSResolver:
 
         query_data = query.to_bytes()
 
-        # Send UDP query
+        # Use asyncio UDP transport/protocol instead of low-level socket operations
+        loop = asyncio.get_running_loop()
+
+        # Create future for the response
+        response_future = asyncio.Future()
+
+        class DNSProtocol(asyncio.DatagramProtocol):
+            def __init__(self, future):
+                self.future = future
+
+            def datagram_received(self, data, addr):
+                if not self.future.done():
+                    self.future.set_result(data)
+
+            def error_received(self, exc):
+                if not self.future.done():
+                    self.future.set_exception(exc)
+
         try:
-            # Create UDP socket
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(timeout)
+            # Create UDP endpoint
+            transport, protocol = await loop.create_datagram_endpoint(
+                lambda: DNSProtocol(response_future), family=socket.AF_INET
+            )
 
-            # Send query
-            sock.sendto(query_data, (server_ip, port))
+            try:
+                # Send query
+                transport.sendto(query_data, (server_ip, port))
 
-            # Receive response
-            response_data, addr = sock.recvfrom(4096)
-            sock.close()
+                # Wait for response with timeout
+                try:
+                    response_data = await asyncio.wait_for(
+                        response_future, timeout=timeout
+                    )
+                except asyncio.TimeoutError:
+                    raise TimeoutError(
+                        f"Query to {server_ip}:{port} timed out after {timeout}s"
+                    )
 
-            # Parse response
-            response = DNSMessage.from_bytes(response_data)
+                # Parse response
+                response = DNSMessage.from_bytes(response_data)
 
-            # Verify transaction ID matches
-            if response.header.transaction_id != header.transaction_id:
-                raise ValueError("Transaction ID mismatch")
+                # Verify transaction ID matches
+                if response.header.transaction_id != header.transaction_id:
+                    raise ValueError(
+                        f"Transaction ID mismatch: expected {header.transaction_id}, got {response.header.transaction_id}"
+                    )
 
-            return response
+                logger.debug(
+                    f"Successful DNS query to {server_ip}:{port} for {question.name}"
+                )
+                return response
 
-        except socket.timeout:
-            raise TimeoutError(f"Query to {server_ip}:{port} timed out")
+            finally:
+                transport.close()
+
         except Exception as e:
-            if "sock" in locals():
-                sock.close()
+            logger.error(
+                f"DNS query failed to {server_ip}:{port}: {type(e).__name__}: {e}"
+            )
             raise e
 
     def _create_error_response(self, question: DNSQuestion, rcode: int) -> DNSMessage:
