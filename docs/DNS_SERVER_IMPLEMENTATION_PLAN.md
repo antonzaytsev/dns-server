@@ -401,177 +401,131 @@ class DNSMonitor {
 - ✅ Filtering and search work correctly
 - ✅ Mobile responsive design functional
 
-## Phase 6: Security Implementation (Days 18-19)
+## Phase 6: Server Management Scripts (Days 18-19)
 
-### 6.1 Access Control and Rate Limiting
-**Objective**: Implement security features to prevent abuse
-
-**Tasks**:
-1. **IP-based Access Control**
-   - Create `src/dns_server/security/access_control.py`:
-     - IP whitelist/blacklist implementation
-     - Network range support (CIDR notation)
-     - Dynamic IP blocking for suspicious activity
-
-2. **Rate Limiting**
-   - Create `src/dns_server/security/rate_limiter.py`:
-     - Token bucket algorithm implementation
-     - Per-IP rate limiting
-     - Sliding window rate limiting
-     - Rate limit bypass for whitelisted IPs
-
-3. **Query Filtering**
-   - Create `src/dns_server/security/filter.py`:
-     - Domain blacklist support
-     - Malicious domain detection
-     - Query pattern analysis
-
-**Validation Criteria**:
-- ✅ Rate limiting prevents DNS amplification attacks
-- ✅ IP whitelisting/blacklisting works correctly
-- ✅ Malicious queries are blocked and logged
-
-### 6.2 Security Monitoring
-**Objective**: Detect and log security threats
+### 6.1 Start/Stop Scripts Development
+**Objective**: Create user-friendly scripts to simplify server operations
 
 **Tasks**:
-1. **Anomaly Detection**
-   - Create `src/dns_server/security/monitor.py`:
-     - Unusual query pattern detection
-     - High-frequency query detection
-     - Suspicious domain query detection
+1. **Main Control Script**
+   - Create `scripts/dns-server.sh` (Unix/Linux/macOS):
+     - Start, stop, restart, status commands
+     - PID file management for proper process tracking
+     - Environment validation (Python version, dependencies)
+     - Virtual environment activation
+     - Configuration file validation before start
+     - Graceful shutdown with configurable timeout
 
-2. **Security Logging**
-   - Enhanced logging for security events
-   - Integration with main logging system
-   - Alert generation for critical events
+2. **Windows Batch Script**
+   - Create `scripts/dns-server.bat` (Windows):
+     - Same functionality as Unix script but for Windows
+     - PowerShell integration for better process management
+     - Windows service installation option
+
+3. **Python CLI Interface**
+   - Create `src/dns_server/cli.py`:
+     - Click-based command-line interface
+     - Cross-platform server management
+     - Configuration validation and testing
+     - Health check commands
+     - Log viewing and management
+
+**Implementation Details**:
+```bash
+# Example structure for dns-server.sh
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+VENV_PATH="$PROJECT_ROOT/venv"
+PID_FILE="$PROJECT_ROOT/dns-server.pid"
+CONFIG_FILE="$PROJECT_ROOT/config/default.yaml"
+
+start_server() {
+    # Check if server is already running
+    # Activate virtual environment
+    # Validate configuration
+    # Start server in background
+    # Save PID to file
+}
+
+stop_server() {
+    # Read PID from file
+    # Send graceful shutdown signal
+    # Wait for process to terminate
+    # Clean up PID file
+}
+```
+
+```python
+# Example CLI structure
+import click
+from dns_server.main import DNSServerApp
+
+@click.group()
+def cli():
+    """DNS Server Management CLI"""
+    pass
+
+@cli.command()
+@click.option('--config', '-c', default='config/default.yaml')
+@click.option('--daemon', '-d', is_flag=True, help='Run in daemon mode')
+def start(config, daemon):
+    """Start the DNS server"""
+    # Implementation here
+
+@cli.command()
+def stop():
+    """Stop the DNS server"""
+    # Implementation here
+
+@cli.command()
+def status():
+    """Show server status"""
+    # Implementation here
+```
 
 **Validation Criteria**:
-- ✅ Anomalies are detected and logged
-- ✅ Security events trigger appropriate alerts
-- ✅ False positive rate is acceptable
+- ✅ Scripts work on all target platforms (Linux, macOS, Windows)
+- ✅ Proper process management with PID tracking
+- ✅ Graceful shutdown functionality
+- ✅ Configuration validation before startup
+- ✅ Clear error messages and user feedback
 
-## Phase 7: Monitoring and Health Checks (Days 20-21)
-
-### 7.1 Health Monitoring System
-**Objective**: Implement comprehensive health monitoring
+### 6.2 System Integration and Service Management
+**Objective**: Provide system-level integration options
 
 **Tasks**:
-1. **Health Check Endpoints**
-   - Create `src/dns_server/monitoring/health.py`:
-     - `/health` endpoint with detailed status
-     - Dependency health checks (upstream servers)
-     - Resource usage monitoring (CPU, memory)
+1. **Systemd Service File**
+   - Create `scripts/dns-server.service`:
+     - Proper systemd unit file for Linux systems
+     - Automatic restart on failure
+     - Dependency management
+     - User/group configuration
+     - Environment setup
 
-2. **Metrics Collection**
-   - Create `src/dns_server/monitoring/metrics.py`:
-     - Prometheus-compatible metrics export
-     - Custom metrics for DNS-specific operations
-     - Performance counters and histograms
+2. **Process Management Integration**
+   - Create supervisor configuration: `scripts/dns-server.conf`
+   - Create PM2 configuration: `scripts/ecosystem.config.js`
+   - Docker Compose file: `docker-compose.yml`
 
-3. **Alerting System**
-   - Create `src/dns_server/monitoring/alerts.py`:
-     - Threshold-based alerting
-     - Email/webhook notification support
-     - Alert escalation and de-duplication
-
-**Validation Criteria**:
-- ✅ Health endpoints return accurate status
-- ✅ Metrics are exported in Prometheus format
-- ✅ Alerts trigger correctly for failure conditions
-
-### 7.2 Operational Features
-**Objective**: Implement production-ready operational features
-
-**Tasks**:
-1. **Graceful Shutdown**
-   - Signal handling for clean shutdown
-   - Connection draining
-   - Cache persistence on shutdown
-
-2. **Process Management**
-   - systemd service file creation
-   - Docker container support
-   - Supervisor configuration
+3. **Installation Helpers**
+   - Create `scripts/install.sh`:
+     - Automated installation script
+     - Dependency checking and installation
+     - Virtual environment setup
+     - Service registration (optional)
+   - Create `scripts/uninstall.sh` for clean removal
 
 **Validation Criteria**:
-- ✅ Server shuts down gracefully without data loss
-- ✅ Process management tools work correctly
-- ✅ Docker container runs successfully
+- ✅ systemd service works correctly
+- ✅ Process managers can manage the server
+- ✅ Installation script works on clean systems
+- ✅ All system integration methods functional
 
-## Phase 8: Testing and Quality Assurance (Days 22-25)
+## Phase 7: Final Integration and Validation (Days 20-22)
 
-### 8.1 Comprehensive Testing Suite
-**Objective**: Ensure all functionality works correctly
-
-**Tasks**:
-1. **Unit Tests**
-   - Test coverage for all modules (target: 90%+)
-   - DNS message parsing/construction tests
-   - Cache functionality tests
-   - Configuration validation tests
-
-2. **Integration Tests**
-   - End-to-end DNS query/response tests
-   - Web interface API tests
-   - WebSocket functionality tests
-   - Security feature tests
-
-3. **Performance Tests**
-   - Load testing with 1000+ concurrent connections
-   - Throughput testing (10k+ QPS)
-   - Memory leak detection
-   - Cache performance validation
-
-4. **Security Tests**
-   - Rate limiting effectiveness
-   - Access control validation
-   - Malformed packet handling
-   - DNS amplification attack prevention
-
-**Testing Tools**:
-- pytest for unit/integration tests
-- locust or similar for load testing
-- dig/nslookup for DNS functionality testing
-- Custom scripts for security testing
-
-**Validation Criteria**:
-- ✅ All tests pass consistently
-- ✅ Performance requirements met under load
-- ✅ Security features prevent known attack vectors
-- ✅ No memory leaks detected during extended testing
-
-### 8.2 Documentation and Deployment
-**Objective**: Complete documentation and deployment preparation
-
-**Tasks**:
-1. **Documentation Creation**
-   - Installation guide with step-by-step instructions
-   - Configuration reference with all parameters
-   - API documentation for web interface
-   - Troubleshooting guide with common issues
-   - Performance tuning guide
-
-2. **Deployment Preparation**
-   - Docker image creation and testing
-   - pip package preparation
-   - systemd service file
-   - Example configuration files
-
-3. **Final Validation**
-   - Complete requirements checklist review
-   - End-to-end testing in clean environment
-   - Documentation accuracy verification
-
-**Validation Criteria**:
-- ✅ Installation works from documentation alone
-- ✅ All configuration options documented
-- ✅ Docker deployment successful
-- ✅ pip installation works correctly
-
-## Phase 9: Final Integration and Validation (Days 26-28)
-
-### 9.1 Complete System Integration
+### 7.1 Complete System Integration
 **Objective**: Ensure all components work together seamlessly
 
 **Tasks**:
@@ -592,7 +546,7 @@ class DNSMonitor {
 - ✅ All performance requirements consistently met
 - ✅ No resource leaks or degradation over time
 
-### 9.2 Requirements Compliance Verification
+### 7.2 Requirements Compliance Verification
 
 **Final Requirements Checklist**:
 
@@ -658,25 +612,16 @@ class DNSMonitor {
 - [ ] Configuration validation
 - [ ] All parameters configurable
 
-#### ✅ Security Features (Requirements 8.1-8.2)
-- [ ] IP whitelisting/blacklisting
-- [ ] Rate limiting implementation
-- [ ] Query filtering for malicious domains
-- [ ] Optional DNSSEC support
-- [ ] Anomaly detection
-- [ ] Security logging
-- [ ] Domain blacklist support
+#### ✅ Server Management (Requirements 8.1-8.2)
+- [ ] Cross-platform start/stop scripts
+- [ ] PID-based process management
+- [ ] Graceful shutdown functionality
+- [ ] Configuration validation on startup
+- [ ] systemd service integration
+- [ ] Process manager compatibility
+- [ ] Installation and uninstall scripts
 
-#### ✅ Monitoring and Health Checks (Requirements 9.1-9.2)
-- [ ] Health check HTTP endpoint
-- [ ] Prometheus-compatible metrics
-- [ ] Basic alerting system
-- [ ] Performance monitoring
-- [ ] Graceful shutdown
-- [ ] Process manager support
-- [ ] Resource monitoring
-
-#### ✅ Installation and Deployment (Requirements 10.1-10.2)
+#### ✅ Installation and Deployment (Requirements 9.1-9.2)
 - [ ] Minimal external dependencies
 - [ ] Virtual environment support
 - [ ] pip installable package
@@ -692,7 +637,7 @@ The implementation will be considered successful when:
 3. **Feature Requirements**: All specified features implemented and tested
 4. **Quality Requirements**: Comprehensive test coverage with stable operation
 5. **Documentation Requirements**: Complete documentation enabling independent deployment
-6. **Security Requirements**: All security features functional and effective
+6. **Usability Requirements**: Simple and reliable server management scripts
 
 ## Risk Mitigation
 
@@ -704,11 +649,11 @@ The implementation will be considered successful when:
 **Schedule Risks**:
 - **Feature creep**: Strict adherence to requirements document
 - **Integration complexity**: Early integration testing and modular design
-- **Testing time**: Parallel development of tests with features
+- **Cross-platform compatibility**: Early testing on all target platforms
 
 **Quality Risks**:
-- **Incomplete testing**: Automated test coverage reporting
+- **Script reliability**: Extensive testing of management scripts across platforms
 - **Documentation gaps**: Documentation written alongside implementation
 - **Configuration complexity**: Extensive validation and clear error messages
 
-This implementation plan provides a systematic approach to building a production-ready DNS server that fully satisfies all specified requirements while maintaining high code quality and operational reliability.
+This implementation plan provides a systematic approach to building a production-ready DNS server that fully satisfies all specified requirements while maintaining high code quality, operational reliability, and ease of use through comprehensive management scripts.
