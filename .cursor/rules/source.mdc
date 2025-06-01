@@ -1,7 +1,7 @@
 ---
 description:
 globs:
-alwaysApply: false
+alwaysApply: true
 ---
 To start, stop, restart application use docker compose.
 When making commits to git, always make sure pre commit checks pass.

@@ -11,9 +11,7 @@ services:
 
     # Volume mounts
     volumes:
-      - ./config:/app/config:ro           # Configuration (read-only)
-      - ./logs:/app/logs                  # Logs directory
-      - dns-server-cache:/app/cache       # Persistent cache
+      - ./:/app
 
     # Environment variables
     environment:

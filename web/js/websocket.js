@@ -1,4 +1,5 @@
 /**
+ * test
  * WebSocket Manager for DNS Server Dashboard
  *
  * Handles real-time communication with the DNS server backend
@@ -37,6 +38,8 @@ class WebSocketManager {
 
             console.log('Connecting to WebSocket:', wsUrl);
             this.ws = new WebSocket(wsUrl);
+
+            console.log('WebSocket object created:', this.ws);
 
             this.ws.onopen = this.onOpen;
             this.ws.onmessage = this.onMessage;
@@ -277,6 +280,8 @@ class WebSocketManager {
      * Handle DNS query message
      */
     handleDnsQuery(message) {
+        console.log('🔥 REAL-TIME DNS Query received:', message.query);
+
         // Add to query buffer
         this.queryBuffer.unshift(message.query);
 
@@ -287,7 +292,10 @@ class WebSocketManager {
 
         // Update dashboard
         if (window.dashboard) {
+            console.log('📊 Updating dashboard with new DNS query');
             window.dashboard.addDnsQuery(message.query);
+        } else {
+            console.error('❌ Dashboard not available for real-time update');
         }
     }
 
@@ -344,7 +352,7 @@ class WebSocketManager {
     /**
      * Register message handler
      */
-    onMessage(type, handler) {
+    addMessageHandler(type, handler) {
         if (!this.messageHandlers.has(type)) {
             this.messageHandlers.set(type, []);
         }
@@ -354,7 +362,7 @@ class WebSocketManager {
     /**
      * Unregister message handler
      */
-    offMessage(type, handler) {
+    removeMessageHandler(type, handler) {
         const handlers = this.messageHandlers.get(type);
         if (handlers) {
             const index = handlers.indexOf(handler);

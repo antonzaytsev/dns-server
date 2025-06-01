@@ -5,11 +5,12 @@ This module provides DNS-specific logging functionality with the exact JSON form
 specified in the requirements, including request ID tracking and performance timing.
 """
 
+import asyncio
 import time
 import uuid
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from dns import message, rcode
 
@@ -120,6 +121,49 @@ class DNSRequestTracker:
         self.recent_requests = deque(maxlen=max_recent_requests)
         self.max_recent_requests = max_recent_requests
 
+        # Real-time notification callbacks
+        self._query_callbacks: List[Callable[[Dict[str, Any]], None]] = []
+
+    def add_query_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
+        """Add a callback to be called when a new DNS query is completed.
+
+        Args:
+            callback: Function to call with query data
+        """
+        self._query_callbacks.append(callback)
+
+    def remove_query_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
+        """Remove a query callback.
+
+        Args:
+            callback: Function to remove
+        """
+        if callback in self._query_callbacks:
+            self._query_callbacks.remove(callback)
+
+    def _notify_query_callbacks(self, query_data: Dict[str, Any]) -> None:
+        """Notify all registered callbacks about a new query.
+
+        Args:
+            query_data: The DNS query data
+        """
+        for callback in self._query_callbacks:
+            try:
+                # Handle both sync and async callbacks
+                result = callback(query_data)
+                if asyncio.iscoroutine(result):
+                    # Schedule async callback
+                    try:
+                        loop = asyncio.get_event_loop()
+                        loop.create_task(result)
+                    except RuntimeError:
+                        # No event loop running, skip async callback
+                        pass
+            except Exception as ex:
+                # Log callback errors but don't fail the main process
+                logger = get_logger("dns_request_tracker")
+                logger.warning(f"Error in query callback: {ex}")
+
     def start_request(self, request_id: Optional[str] = None) -> str:
         """Start tracking a DNS request.
 
@@ -186,6 +230,9 @@ class DNSRequestTracker:
 
         # Store in recent requests for real-time access
         self.recent_requests.appendleft(request_record)
+
+        # Notify real-time callbacks IMMEDIATELY
+        self._notify_query_callbacks(request_record)
 
         # Log the request
         if error:

@@ -37,7 +37,7 @@ class WebSocketManager:
         # Background tasks
         self._background_tasks: Set[asyncio.Task] = set()
         self._is_running = False
-        self._query_monitor_task: Optional[asyncio.Task] = None
+        self._stats_task: Optional[asyncio.Task] = None
 
     def get_dns_server_app(self):
         """Get DNS server application instance."""
@@ -52,15 +52,27 @@ class WebSocketManager:
 
         self._is_running = True
 
-        # Start query monitoring task
-        self._query_monitor_task = asyncio.create_task(self._monitor_dns_queries())
-        self._background_tasks.add(self._query_monitor_task)
+        # Register real-time DNS query callback
+        request_tracker = get_request_tracker()
+        if request_tracker:
+            request_tracker.add_query_callback(self._on_dns_query_completed)
+            self.logger.info("Registered real-time DNS query callback")
 
-        self.logger.info("WebSocket manager started")
+        # Start periodic stats update task
+        self._stats_task = asyncio.create_task(self._periodic_stats_sender())
+        self._background_tasks.add(self._stats_task)
+
+        self.logger.info("WebSocket manager started with real-time query notifications")
 
     async def stop(self) -> None:
         """Stop WebSocket manager and cleanup connections."""
         self._is_running = False
+
+        # Unregister from request tracker
+        request_tracker = get_request_tracker()
+        if request_tracker:
+            request_tracker.remove_query_callback(self._on_dns_query_completed)
+            self.logger.info("Unregistered DNS query callback")
 
         # Cancel background tasks
         for task in self._background_tasks:
@@ -87,6 +99,25 @@ class WebSocketManager:
 
         self.logger.info("WebSocket manager stopped")
 
+    async def _on_dns_query_completed(self, query_data: dict) -> None:
+        """Callback called when a DNS query is completed - provides instant real-time updates.
+
+        Args:
+            query_data: The completed DNS query data
+        """
+        try:
+            if self.clients:
+                # Broadcast immediately to all connected clients
+                await self.broadcast({"type": "dns_query", "query": query_data})
+
+                self.logger.debug(
+                    "Real-time DNS query broadcast",
+                    domain=query_data.get("domain"),
+                    clients=len(self.clients),
+                )
+        except Exception as ex:
+            log_exception(self.logger, "Error broadcasting real-time DNS query", ex)
+
     async def add_client(self, websocket: web_ws.WebSocketResponse) -> str:
         """Add a new WebSocket client.
 
@@ -106,7 +137,7 @@ class WebSocketManager:
                 "type": "welcome",
                 "client_id": client_id,
                 "timestamp": datetime.utcnow().isoformat() + "Z",
-                "message": "Connected to DNS Server WebSocket",
+                "message": "Connected to DNS Server WebSocket - Real-time updates enabled",
             },
         )
 
@@ -325,106 +356,47 @@ class WebSocketManager:
                 self.logger, f"Error sending recent logs to client {client_id}", ex
             )
 
-    async def _monitor_dns_queries(self) -> None:
-        """Background task to monitor DNS queries and broadcast real-time updates."""
-        self.logger.info("Starting DNS query monitoring")
-
-        # Track last seen query to avoid duplicates
-        last_query_time = datetime.utcnow().timestamp()
+    async def _periodic_stats_sender(self) -> None:
+        """Background task to send periodic statistics updates."""
+        self.logger.info("Starting periodic stats sender")
 
         while self._is_running:
             try:
+                # Send stats update every 30 seconds
+                await asyncio.sleep(30)
+
                 if not self.clients:
-                    # No clients connected, sleep longer
-                    await asyncio.sleep(1)
                     continue
 
-                # Get recent queries since last check
-                request_tracker = get_request_tracker()
-                if request_tracker and hasattr(request_tracker, "get_recent_requests"):
-                    # Get recent logs (last 10 seconds)
-                    recent_logs = await request_tracker.get_recent_requests(limit=100)
+                dns_app = self.get_dns_server_app()
+                if not dns_app:
+                    continue
 
-                    # Filter for new queries
-                    new_queries = []
-                    current_time = datetime.utcnow().timestamp()
+                # Compile stats
+                stats = {
+                    "type": "stats_update",
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                }
 
-                    for log in recent_logs:
-                        # Assuming log has timestamp
-                        log_time = log.get("timestamp")
-                        if log_time:
-                            # Parse timestamp and compare
-                            try:
-                                if isinstance(log_time, str):
-                                    log_timestamp = datetime.fromisoformat(
-                                        log_time.replace("Z", "+00:00")
-                                    ).timestamp()
-                                else:
-                                    log_timestamp = log_time
+                # DNS stats
+                if dns_app.dns_server:
+                    dns_stats = dns_app.dns_server.get_stats()
+                    stats["dns_stats"] = dns_stats
 
-                                if log_timestamp > last_query_time:
-                                    new_queries.append(log)
-                            except Exception:
-                                # If timestamp parsing fails, include the query
-                                new_queries.append(log)
+                # Cache stats
+                if dns_app.cache and hasattr(dns_app.cache, "stats_manager"):
+                    cache_stats = await dns_app.cache.stats_manager.get_stats()
+                    stats["cache_stats"] = cache_stats
 
-                    # Broadcast new queries
-                    for query in new_queries:
-                        await self.broadcast({"type": "dns_query", "query": query})
-
-                    last_query_time = current_time
-
-                # Send periodic server stats update
-                await self._send_periodic_stats()
-
-                # Sleep for a short interval
-                await asyncio.sleep(0.5)  # Check every 500ms
+                await self.broadcast(stats)
 
             except asyncio.CancelledError:
                 break
             except Exception as ex:
-                log_exception(self.logger, "Error in DNS query monitoring", ex)
-                await asyncio.sleep(1)  # Wait before retrying
+                log_exception(self.logger, "Error sending periodic stats", ex)
+                await asyncio.sleep(5)  # Wait before retrying
 
-        self.logger.info("DNS query monitoring stopped")
-
-    async def _send_periodic_stats(self) -> None:
-        """Send periodic statistics updates to all clients."""
-        try:
-            # Send stats update every 30 seconds
-            if not hasattr(self, "_last_stats_time"):
-                self._last_stats_time = 0
-
-            current_time = datetime.utcnow().timestamp()
-            if current_time - self._last_stats_time < 30:
-                return
-
-            self._last_stats_time = current_time
-
-            dns_app = self.get_dns_server_app()
-            if not dns_app:
-                return
-
-            # Compile stats
-            stats = {
-                "type": "stats_update",
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-            }
-
-            # DNS stats
-            if dns_app.dns_server:
-                dns_stats = dns_app.dns_server.get_stats()
-                stats["dns_stats"] = dns_stats
-
-            # Cache stats
-            if dns_app.cache and hasattr(dns_app.cache, "stats_manager"):
-                cache_stats = await dns_app.cache.stats_manager.get_stats()
-                stats["cache_stats"] = cache_stats
-
-            await self.broadcast(stats)
-
-        except Exception as ex:
-            log_exception(self.logger, "Error sending periodic stats", ex)
+        self.logger.info("Periodic stats sender stopped")
 
     def get_client_count(self) -> int:
         """Get number of connected clients.

@@ -305,6 +305,8 @@ class DNSDashboard {
      * Add new DNS query to display
      */
     addDnsQuery(query) {
+        console.log('🚀 Dashboard: Adding new DNS query to UI:', query);
+
         // Add to queries array
         this.queries.unshift(query);
 
@@ -318,8 +320,37 @@ class DNSDashboard {
             window.chartsManager.addDnsQuery(query);
         }
 
-        // Update display
-        this.renderQueries();
+        // Add new query to top of list
+        console.log('🖼️ Dashboard: Adding new query to top of list');
+        this.addNewQueryToTop(query);
+
+        console.log('✅ Dashboard: Real-time DNS query update complete');
+    }
+
+    /**
+     * Add a new query to the top of the list
+     */
+    addNewQueryToTop(query) {
+        const queriesList = document.getElementById('queries-list');
+        if (!queriesList) return;
+
+        // Create new query row
+        const newRow = this.createQueryRow(query);
+
+        // Insert at the top of the list
+        queriesList.insertBefore(newRow, queriesList.firstChild);
+
+        // Remove excess rows if needed
+        const maxDisplayRows = 100; // Limit displayed rows for performance
+        const rows = queriesList.children;
+        while (rows.length > maxDisplayRows) {
+            queriesList.removeChild(rows[rows.length - 1]);
+        }
+
+        // Auto-scroll to top to show new query
+        if (this.autoScroll && !this.searchFilter) {
+            queriesList.scrollTop = 0;
+        }
     }
 
     /**
@@ -349,16 +380,16 @@ class DNSDashboard {
         // Clear existing content
         queriesList.innerHTML = '';
 
-        // Render filtered queries
+        // Render filtered queries (without highlight for bulk rendering)
         filteredQueries.forEach(query => {
             const queryRow = this.createQueryRow(query);
             queriesList.appendChild(queryRow);
         });
 
-        // Auto-scroll to bottom
+        // Auto-scroll to top for new queries (since we want newest first)
         if (this.autoScroll && !this.searchFilter) {
             setTimeout(() => {
-                queriesList.scrollTop = queriesList.scrollHeight;
+                queriesList.scrollTop = 0;
             }, 100);
         }
     }
