@@ -42,6 +42,7 @@ def _get_logger():
         except RuntimeError:
             # Fallback to basic logging if structured logging not configured
             import logging
+
             logger = logging.getLogger("dns_server_core")
     return logger
 

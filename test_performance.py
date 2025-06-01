@@ -16,15 +16,22 @@ import sys
 import time
 from pathlib import Path
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
-from dns_server.core.performance import (
-    concurrency_limiter,
-    connection_pool,
-    performance_monitor,
-    timing_decorator,
-)
+try:
+    from dns_server.core.performance import (
+        concurrency_limiter,
+        connection_pool,
+        performance_monitor,
+        timing_decorator,
+    )
+except ImportError:
+    # Add src to path if direct import fails
+    sys.path.insert(0, str(Path(__file__).parent / "src"))
+    from dns_server.core.performance import (
+        concurrency_limiter,
+        connection_pool,
+        performance_monitor,
+        timing_decorator,
+    )
 
 
 async def test_performance_monitor():
@@ -65,7 +72,7 @@ async def test_connection_pool():
         conn1 = await connection_pool.get_connection("8.8.8.8", 53)
         conn2 = await connection_pool.get_connection("1.1.1.1", 53)
 
-        print(f"✓ Got connections to 8.8.8.8 and 1.1.1.1")
+        print("Got connections to 8.8.8.8 and 1.1.1.1")
 
         # Return connections
         await conn1.__aexit__(None, None, None)
@@ -180,11 +187,11 @@ async def main():
         await run_load_test()
 
         print("\n" + "=" * 50)
-        print("✓ All performance optimization tests completed successfully!")
+        print("All performance optimization tests completed successfully!")
 
         # Final performance stats
         stats = performance_monitor.get_stats()
-        print(f"\nFinal Stats:")
+        print("\nFinal Stats:")
         print(f"Memory: {stats.get('memory', {})}")
         print(
             f"Total operations: {sum(op.get('count', 0) for op in stats.get('operations', {}).values())}"

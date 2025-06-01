@@ -90,13 +90,17 @@ class DNSServerApp:
             web_config = getattr(self.config, "web", None)
             if web_config and getattr(web_config, "enabled", True):
                 # Create web config that includes server settings
-                web_server_config = type('WebServerConfig', (), {
-                    'bind_address': self.config.server.bind_address,
-                    'port': self.config.server.web_port,
-                    'debug': False,
-                    **vars(web_config)
-                })()
-                
+                web_server_config = type(
+                    "WebServerConfig",
+                    (),
+                    {
+                        "bind_address": self.config.server.bind_address,
+                        "port": self.config.server.web_port,
+                        "debug": False,
+                        **vars(web_config),
+                    },
+                )()
+
                 self.web_server = WebServer(web_server_config, self)
 
             self.logger.info(
@@ -182,11 +186,11 @@ class DNSServerApp:
 
         try:
             await self.dns_server.start()
-            
+
             # Start web server if enabled
             if self.web_server:
                 await self.web_server.start()
-            
+
             self.logger.info(
                 "DNS server started successfully",
                 bind_address=self.config.server.bind_address,
@@ -263,7 +267,7 @@ class DNSServerApp:
     async def health_check(self):
         """Perform health check"""
         health = {"status": "not_running"}
-        
+
         if self.dns_server:
             health = await self.dns_server.health_check()
             # Add performance metrics to health check
