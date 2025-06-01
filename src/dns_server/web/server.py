@@ -291,7 +291,7 @@ class WebServer:
             self.site = web.TCPSite(
                 self.runner,
                 host=getattr(self.config, "bind_address", "127.0.0.1"),
-                port=getattr(self.config, "port", 8080),
+                port=getattr(self.config, "port", 9980),
             )
 
             await self.site.start()
@@ -303,7 +303,7 @@ class WebServer:
             self.logger.info(
                 "Web server started",
                 host=getattr(self.config, "bind_address", "127.0.0.1"),
-                port=getattr(self.config, "port", 8080),
+                port=getattr(self.config, "port", 9980),
             )
 
         except Exception as ex:

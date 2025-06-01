@@ -59,7 +59,7 @@ class TestServerConfig:
     def test_valid_server_config(self):
         """Test valid server configuration."""
         config = ServerConfig(
-            bind_address="127.0.0.1", dns_port=9953, web_port=8080, workers=4
+            bind_address="127.0.0.1", dns_port=9953, web_port=9980, workers=4
         )
         assert config.bind_address == "127.0.0.1"
         assert config.dns_port == 9953
@@ -187,6 +187,6 @@ class TestDNSConfig:
 
     def test_port_conflict(self):
         """Test DNS and web port conflict."""
-        server_config = ServerConfig(dns_port=8080, web_port=8080)
+        server_config = ServerConfig(dns_port=9980, web_port=9980)
         with pytest.raises(ValueError, match="DNS and web ports cannot be the same"):
             DNSConfig(server=server_config)

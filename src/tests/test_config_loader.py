@@ -30,7 +30,7 @@ class TestConfigLoader:
 server:
   bind_address: "0.0.0.0"
   dns_port: 53
-  web_port: 8080
+  web_port: 9980
 
 upstream_servers:
   - "8.8.8.8"
@@ -180,7 +180,7 @@ logging:
         """Test conversion of environment variable values to proper types."""
         env_vars = {
             "DNS_SERVER_SERVER_DNS_PORT": "9953",  # Should become int
-            "DNS_SERVER_SERVER_WEB_PORT": "8080",  # Different from DNS port
+            "DNS_SERVER_SERVER_WEB_PORT": "9980",  # Different from DNS port
             "DNS_SERVER_WEB_ENABLED": "true",  # Should become bool
             "DNS_SERVER_SECURITY_BLACKLIST_ENABLED": "false",  # Should become bool
             "DNS_SERVER_CACHE_DEFAULT_TTL": "300.5",  # Should become float
@@ -197,7 +197,7 @@ logging:
 
             assert config.server.dns_port == 9953
             assert isinstance(config.server.dns_port, int)
-            assert config.server.web_port == 8080
+            assert config.server.web_port == 9980
             assert isinstance(config.server.web_port, int)
             assert config.web.enabled is True
             assert isinstance(config.web.enabled, bool)
@@ -254,7 +254,7 @@ cache:
 
             # Should keep default values for non-specified settings
             assert config.server.bind_address == "127.0.0.1"  # Default
-            assert config.server.web_port == 8080  # Default
+            assert config.server.web_port == 9980  # Default
             assert config.cache.default_ttl == 300  # Default
 
         finally:

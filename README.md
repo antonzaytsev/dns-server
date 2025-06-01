@@ -95,7 +95,7 @@ docker-compose pull && docker-compose up -d  # Update and restart
 
 When running, the DNS server is accessible at:
 - **DNS queries**: `127.0.0.1:9953` (UDP/TCP)
-- **Web interface**: `http://127.0.0.1:8080`
+- **Web interface**: `http://127.0.0.1:9980`
 
 ## Configuration
 
@@ -104,10 +104,10 @@ When running, the DNS server is accessible at:
 Edit `config/default.yaml` to customize server settings:
 
 - **DNS Port**: Change `server.dns_port` (default: 9953)
-- **Web Port**: Change `server.web_port` (default: 8080)
+- **Web Port**: Change `server.web_port` (default: 9980)
+- **Bind Address**: Change `server.bind_address`
 - **Upstream Servers**: Modify `upstream_servers` list
 - **Cache Size**: Adjust `cache.max_size_mb`
-- **Bind Address**: Change `server.bind_address`
 - **Web Interface**: Enable/disable with `web.enabled`
 
 After editing configuration:
@@ -169,7 +169,7 @@ Build and run with custom settings:
 docker build -t dns-server .
 
 # Run with custom ports
-docker run -p 9953:9953/udp -p 9953:9953/tcp -p 8080:8080 dns-server
+docker run -p 9953:9953/udp -p 9953:9953/tcp -p 9980:9980 dns-server
 
 # Run with custom config volume
 docker run -v $(pwd)/config:/app/config dns-server
@@ -177,7 +177,7 @@ docker run -v $(pwd)/config:/app/config dns-server
 
 ## Web Interface
 
-Access the comprehensive web interface at `http://127.0.0.1:8080` for:
+Access the comprehensive web interface at `http://127.0.0.1:9980` for:
 
 ### Real-Time Monitoring
 - Live DNS query feed with real-time updates via WebSocket
@@ -251,12 +251,12 @@ Monitor DNS traffic patterns, identify slow queries, and analyze cache effective
 - **Virtual environment missing**: Run setup commands in Quick Start
 
 ### Docker Issues
-- **Port conflicts**: Check if ports 9953 or 8080 are already in use
+- **Port conflicts**: Check if ports 9953 or 9980 are already in use
 - **Permission denied**: Ensure Docker daemon is running and user has permissions
 - **Build failures**: Check Dockerfile and ensure all files are present
 
 ### Web Interface Not Loading
-- Check that the web port (default 8080) is not in use by another application
+- Check that the web port (default 9980) is not in use by another application
 - Verify the web interface is enabled in configuration (`web.enabled: true`)
 - Check firewall settings if accessing from another machine
 

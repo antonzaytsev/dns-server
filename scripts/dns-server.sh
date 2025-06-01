@@ -140,7 +140,7 @@ start_server() {
     if is_running; then
         print_info "DNS server started successfully (PID: $pid)"
         print_info "Log file: $LOG_FILE"
-        print_info "Web interface: http://localhost:8080"
+        print_info "Web interface: http://localhost:9980"
         return 0
     else
         print_error "Failed to start DNS server"
@@ -240,7 +240,7 @@ show_status() {
             echo "Log size: $(du -h "$LOG_FILE" 2>/dev/null | cut -f1 || echo "unknown")"
         fi
 
-        echo "Web interface: http://localhost:8080"
+        echo "Web interface: http://localhost:9980"
 
     else
         echo -e "Status: ${RED}Not running${NC}"

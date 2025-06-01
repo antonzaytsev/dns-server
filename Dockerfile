@@ -37,7 +37,7 @@ RUN chown -R dnsserver:dnsserver /app
 USER dnsserver
 
 # Expose ports
-EXPOSE 9953/udp 9953/tcp 8080/tcp
+EXPOSE 9953/udp 9953/tcp 9980/tcp
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

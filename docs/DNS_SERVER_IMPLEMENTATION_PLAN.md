@@ -80,7 +80,7 @@ This document provides a detailed step-by-step implementation plan for building 
      server:
        bind_address: "127.0.0.1"
        dns_port: 9953  # Non-privileged port for development
-       web_port: 8080
+       web_port: 9980
        workers: 4
 
      upstream_servers:
@@ -383,7 +383,7 @@ class CacheEntry:
 // Example WebSocket integration
 class DNSMonitor {
     constructor() {
-        this.ws = new WebSocket('ws://localhost:8080/ws');
+        this.ws = new WebSocket('ws://localhost:9980/ws');
         this.queryHistory = [];
     }
 
@@ -498,7 +498,7 @@ services:
     ports:
       - "9953:9953/udp"    # DNS port (UDP)
       - "9953:9953/tcp"    # DNS port (TCP)
-      - "8080:8080/tcp"    # Web interface port
+      - "9980:9980/tcp"    # Web interface port
     volumes:
       - ./config:/app/config:ro
       - ./logs:/app/logs
