@@ -9,10 +9,8 @@ This module provides REST API endpoints for:
 - Prometheus-compatible metrics
 """
 
-import json
 import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from datetime import datetime
 
 from aiohttp import web
 from aiohttp.web import Application, Request, Response

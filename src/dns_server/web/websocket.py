@@ -11,7 +11,6 @@ This module provides real-time WebSocket communication for:
 import asyncio
 import json
 import uuid
-import weakref
 from datetime import datetime
 from typing import Dict, Optional, Set
 

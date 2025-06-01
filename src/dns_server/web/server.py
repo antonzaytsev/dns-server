@@ -149,7 +149,7 @@ class WebServer:
 
             return response
 
-        except Exception as ex:
+        except Exception:
             process_time = asyncio.get_event_loop().time() - start_time
 
             self.logger.error(
@@ -157,7 +157,7 @@ class WebServer:
                 method=request.method,
                 path=request.path,
                 remote=request.remote,
-                error=str(ex),
+                error="An error occurred",
                 response_time_ms=round(process_time * 1000, 2),
             )
             raise
@@ -166,7 +166,7 @@ class WebServer:
         """Handle HTTP errors gracefully."""
         try:
             return await handler(request)
-        except web.HTTPException as ex:
+        except web.HTTPException:
             # Re-raise HTTP exceptions as they are handled properly by aiohttp
             raise
         except Exception as ex:
