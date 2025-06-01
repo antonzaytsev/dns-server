@@ -16,7 +16,7 @@ from typing import Dict, Optional, Set
 
 from aiohttp import web_ws
 
-from ..dns_logging import get_logger, get_request_tracker
+from ..dns_logging import get_logger, get_request_tracker, log_exception
 
 
 class WebSocketManager:
@@ -173,8 +173,10 @@ class WebSocketManager:
                 )
 
         except Exception as ex:
-            self.logger.error(
-                "Error handling WebSocket message", client_id=client_id, error=str(ex)
+            log_exception(
+                self.logger,
+                f"Error handling WebSocket message from client {client_id}",
+                ex,
             )
 
     async def _handle_subscription(self, client_id: str, events: list) -> None:
@@ -286,8 +288,8 @@ class WebSocketManager:
             await self._send_to_client(client_id, status)
 
         except Exception as ex:
-            self.logger.error(
-                "Error sending server status", client_id=client_id, error=str(ex)
+            log_exception(
+                self.logger, f"Error sending server status to client {client_id}", ex
             )
 
     async def _send_recent_logs(self, client_id: str, limit: int = 10) -> None:
@@ -317,8 +319,8 @@ class WebSocketManager:
             )
 
         except Exception as ex:
-            self.logger.error(
-                "Error sending recent logs", client_id=client_id, error=str(ex)
+            log_exception(
+                self.logger, f"Error sending recent logs to client {client_id}", ex
             )
 
     async def _monitor_dns_queries(self) -> None:
@@ -379,7 +381,7 @@ class WebSocketManager:
             except asyncio.CancelledError:
                 break
             except Exception as ex:
-                self.logger.error("Error in DNS query monitoring", error=str(ex))
+                log_exception(self.logger, "Error in DNS query monitoring", ex)
                 await asyncio.sleep(1)  # Wait before retrying
 
         self.logger.info("DNS query monitoring stopped")
@@ -420,7 +422,7 @@ class WebSocketManager:
             await self.broadcast(stats)
 
         except Exception as ex:
-            self.logger.error("Error sending periodic stats", error=str(ex))
+            log_exception(self.logger, "Error sending periodic stats", ex)
 
     def get_client_count(self) -> int:
         """Get number of connected clients.

@@ -33,6 +33,7 @@ from dns_server.core.performance import (
 )
 from dns_server.dns_logging import (
     get_logger,
+    log_exception,
     setup_logging,
     start_log_management,
     stop_log_management,
@@ -116,9 +117,12 @@ class DNSServerApp:
 
         except Exception as e:
             if self.logger:
-                self.logger.error("Failed to initialize DNS server", error=str(e))
+                log_exception(self.logger, "Failed to initialize DNS server", e)
             else:
                 print(f"Failed to initialize DNS server: {e}")
+                import traceback
+
+                traceback.print_exc()
             raise
 
     def _configure_performance_settings(self):
@@ -218,7 +222,7 @@ class DNSServerApp:
                 pass
 
         except Exception as e:
-            self.logger.error("Error starting DNS server", error=str(e))
+            log_exception(self.logger, "Error starting DNS server", e)
             raise
         finally:
             await self.stop()
@@ -233,7 +237,7 @@ class DNSServerApp:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                self.logger.error("Error in cleanup loop", error=str(e))
+                log_exception(self.logger, "Error in cleanup loop", e)
 
     async def stop(self):
         """Stop the DNS server"""
