@@ -11,6 +11,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -41,7 +42,7 @@ EXPOSE 9953/udp 9953/tcp 9980/tcp
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python src/dns_server/main.py --config config/default.yaml --health-check
+    CMD curl -f http://localhost:9980/api/status || exit 1
 
 # Default command
 CMD ["python", "src/dns_server/main.py", "--config", "config/default.yaml"]

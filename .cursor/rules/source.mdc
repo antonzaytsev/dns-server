@@ -3,7 +3,5 @@ description:
 globs:
 alwaysApply: false
 ---
-Use "source venv/bin/activate" to run python code.
-To start the server use command "python src/dns_server/main.py".
-To stop server process use command "kill $(ps ax | grep python | grep src/dns_server/main.py | awk '{print $1}')".
+To start, stop, restart application use docker compose.
 When making commits to git, always make sure pre commit checks pass.
