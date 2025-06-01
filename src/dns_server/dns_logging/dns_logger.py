@@ -7,6 +7,7 @@ specified in the requirements, including request ID tracking and performance tim
 
 import time
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -106,10 +107,18 @@ class DNSRequestLogger:
 class DNSRequestTracker:
     """Tracks DNS requests for performance timing and logging."""
 
-    def __init__(self):
-        """Initialize request tracker."""
+    def __init__(self, max_recent_requests: int = 1000):
+        """Initialize request tracker.
+
+        Args:
+            max_recent_requests: Maximum number of recent requests to store in memory
+        """
         self.active_requests: Dict[str, float] = {}
         self.dns_logger = DNSRequestLogger()
+
+        # Store recent requests for real-time display
+        self.recent_requests = deque(maxlen=max_recent_requests)
+        self.max_recent_requests = max_recent_requests
 
     def start_request(self, request_id: Optional[str] = None) -> str:
         """Start tracking a DNS request.
@@ -157,6 +166,27 @@ class DNSRequestTracker:
         start_time = self.active_requests.pop(request_id, time.time())
         response_time_ms = (time.time() - start_time) * 1000
 
+        # Create request record for storage
+        request_record = {
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "request_id": request_id,
+            "client_ip": client_ip,
+            "query_type": query_type,
+            "domain": domain,
+            "response_code": response_code,
+            "response_time_ms": round(response_time_ms, 2),
+            "cache_hit": cache_hit,
+            "upstream_server": upstream_server,
+            "response_data": response_data or [],
+        }
+
+        # Add error field if present
+        if error:
+            request_record["error"] = error
+
+        # Store in recent requests for real-time access
+        self.recent_requests.appendleft(request_record)
+
         # Log the request
         if error:
             self.dns_logger.log_dns_error(
@@ -181,6 +211,87 @@ class DNSRequestTracker:
             )
 
         return response_time_ms
+
+    async def get_recent_requests(
+        self, limit: int = 50, offset: int = 0, filters: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Get recent DNS requests.
+
+        Args:
+            limit: Maximum number of requests to return
+            offset: Number of requests to skip
+            filters: Optional filters to apply
+
+        Returns:
+            List of recent DNS request records
+        """
+        # Convert deque to list for slicing
+        requests_list = list(self.recent_requests)
+
+        # Apply filters if provided
+        if filters:
+            filtered_requests = []
+            for request in requests_list:
+                if self._matches_filters(request, filters):
+                    filtered_requests.append(request)
+            requests_list = filtered_requests
+
+        # Apply offset and limit
+        start_idx = offset
+        end_idx = start_idx + limit
+
+        return requests_list[start_idx:end_idx]
+
+    def _matches_filters(
+        self, request: Dict[str, Any], filters: Dict[str, Any]
+    ) -> bool:
+        """Check if a request matches the given filters.
+
+        Args:
+            request: Request record to check
+            filters: Filters to apply
+
+        Returns:
+            True if request matches all filters
+        """
+        for key, value in filters.items():
+            if (
+                key == "domain"
+                and value.lower() not in request.get("domain", "").lower()
+            ):
+                return False
+            elif key == "query_type" and request.get("query_type") != value:
+                return False
+            elif key == "client_ip" and request.get("client_ip") != value:
+                return False
+            elif key == "cache_hit" and request.get("cache_hit") != value:
+                return False
+            elif key == "since":
+                # Filter by timestamp
+                try:
+                    since_time = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    request_time = datetime.fromisoformat(
+                        request.get("timestamp", "").replace("Z", "+00:00")
+                    )
+                    if request_time < since_time:
+                        return False
+                except (ValueError, AttributeError):
+                    # If timestamp parsing fails, skip this filter
+                    continue
+
+        return True
+
+    def get_request_count(self) -> int:
+        """Get the number of recent requests stored.
+
+        Returns:
+            Number of recent requests
+        """
+        return len(self.recent_requests)
+
+    def clear_recent_requests(self) -> None:
+        """Clear all stored recent requests."""
+        self.recent_requests.clear()
 
 
 def extract_dns_info(dns_message: message.Message) -> Dict[str, Any]:
