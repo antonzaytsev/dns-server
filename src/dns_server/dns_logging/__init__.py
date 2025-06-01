@@ -18,6 +18,7 @@ from .logger import (
     StructuredLogger,
     configure_logger_for_module,
     get_logger,
+    log_exception,
     setup_logging,
 )
 from .manager import (
@@ -33,6 +34,7 @@ __all__ = [
     "StructuredLogger",
     "setup_logging",
     "get_logger",
+    "log_exception",
     "configure_logger_for_module",
     # DNS-specific logging
     "DNSRequestLogger",
