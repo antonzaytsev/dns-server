@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNS Server Dashboard</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE2IDJMMjggMTZMMTYgMzBMNCAzMEw0IDE2TDE2IDJaIiBmaWxsPSIjNDI4NWY0Ii8+Cjx0ZXh0IHg9IjUwJSIgeT0iNTQlIiBkb21pbmFudC1iYXNlbGluZT0iY2VudHJhbCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQtZmFtaWx5PSJtb25vc3BhY2UiIGZvbnQtc2l6ZT0iMTQiIGZvbnQtd2VpZ2h0PSJib2xkIj5ETlM8L3RleHQ+Cjwvc3ZnPgo=">
+</head>
+<body>
+    <div class="dashboard">
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">
+                    <span class="logo-icon">🌐</span>
+                    DNS Server Dashboard
+                </h1>
+                <div class="header-controls">
+                    <div class="status-indicator" id="connection-status">
+                        <span class="status-dot" id="status-dot"></span>
+                        <span id="status-text">Connecting...</span>
+                    </div>
+                    <button id="theme-toggle" class="theme-toggle" title="Toggle Dark/Light Mode">
+                        🌙
+                    </button>
+                    <button id="refresh-btn" class="refresh-btn" title="Refresh Data">
+                        🔄
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Server Status Cards -->
+            <section class="status-cards">
+                <div class="card server-status">
+                    <div class="card-header">
+                        <h3>Server Status</h3>
+                        <span class="card-icon">⚡</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="status-item">
+                            <span class="label">Status:</span>
+                            <span id="server-status" class="value">Unknown</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Uptime:</span>
+                            <span id="server-uptime" class="value">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Version:</span>
+                            <span id="server-version" class="value">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card dns-stats">
+                    <div class="card-header">
+                        <h3>DNS Statistics</h3>
+                        <span class="card-icon">📊</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="status-item">
+                            <span class="label">Total Queries:</span>
+                            <span id="total-queries" class="value">0</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">UDP Queries:</span>
+                            <span id="udp-queries" class="value">0</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">TCP Queries:</span>
+                            <span id="tcp-queries" class="value">0</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Errors:</span>
+                            <span id="error-count" class="value">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card cache-stats">
+                    <div class="card-header">
+                        <h3>Cache Performance</h3>
+                        <span class="card-icon">💾</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="status-item">
+                            <span class="label">Hit Ratio:</span>
+                            <span id="cache-hit-ratio" class="value">0%</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Cache Hits:</span>
+                            <span id="cache-hits" class="value">0</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Cache Misses:</span>
+                            <span id="cache-misses" class="value">0</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Memory Usage:</span>
+                            <span id="cache-memory" class="value">0 MB</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card performance-stats">
+                    <div class="card-header">
+                        <h3>Performance</h3>
+                        <span class="card-icon">🚀</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="status-item">
+                            <span class="label">Avg Response:</span>
+                            <span id="avg-response-time" class="value">0 ms</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">QPS:</span>
+                            <span id="queries-per-second" class="value">0</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Connected Clients:</span>
+                            <span id="websocket-clients" class="value">0</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Memory:</span>
+                            <span id="system-memory" class="value">0 MB</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Charts Section -->
+            <section class="charts-section">
+                <div class="chart-card">
+                    <div class="card-header">
+                        <h3>Query Types Distribution</h3>
+                        <span class="card-icon">📈</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="query-types-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="card-header">
+                        <h3>Cache Hit/Miss Ratio</h3>
+                        <span class="card-icon">🎯</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="cache-ratio-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="card-header">
+                        <h3>Response Time Trend</h3>
+                        <span class="card-icon">⏱️</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="response-time-chart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Recent Queries Section -->
+            <section class="queries-section">
+                <div class="card queries-card">
+                    <div class="card-header">
+                        <h3>Recent DNS Queries</h3>
+                        <span class="card-icon">🔍</span>
+                        <div class="query-controls">
+                            <input type="text" id="search-input" placeholder="Search domain, IP, or type..." class="search-input">
+                            <button id="clear-logs" class="clear-btn" title="Clear Logs">🗑️</button>
+                            <label class="auto-scroll-label">
+                                <input type="checkbox" id="auto-scroll" checked>
+                                Auto-scroll
+                            </label>
+                        </div>
+                    </div>
+                    <div class="queries-container">
+                        <div class="queries-header">
+                            <div class="query-col timestamp-col">Timestamp</div>
+                            <div class="query-col client-col">Client IP</div>
+                            <div class="query-col domain-col">Domain</div>
+                            <div class="query-col type-col">Type</div>
+                            <div class="query-col response-col">Response</div>
+                            <div class="query-col time-col">Time (ms)</div>
+                            <div class="query-col cache-col">Cache</div>
+                        </div>
+                        <div class="queries-list" id="queries-list">
+                            <!-- Queries will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Cache Controls Section -->
+            <section class="controls-section">
+                <div class="card controls-card">
+                    <div class="card-header">
+                        <h3>Cache Management</h3>
+                        <span class="card-icon">⚙️</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="control-group">
+                            <button id="flush-cache" class="control-btn">🔄 Flush Expired</button>
+                            <button id="clear-cache" class="control-btn danger">🗑️ Clear All</button>
+                        </div>
+                        <div class="control-group">
+                            <label for="flush-domain">Flush by domain:</label>
+                            <div class="input-group">
+                                <input type="text" id="flush-domain" placeholder="example.com" class="domain-input">
+                                <button id="flush-domain-btn" class="control-btn">🎯 Flush Domain</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <p>&copy; 2024 DNS Server Dashboard. Real-time DNS monitoring and management.</p>
+                <div class="footer-stats">
+                    <span>Last Update: <span id="last-update">Never</span></span>
+                    <span>WebSocket: <span id="ws-status">Disconnected</span></span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/websocket.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html> 
