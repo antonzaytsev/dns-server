@@ -16,13 +16,12 @@ import random
 import socket
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set
 
 from .message import (
     DNSClass,
     DNSHeader,
     DNSMessage,
-    DNSOpcode,
     DNSQuestion,
     DNSRecordType,
     DNSResourceRecord,
@@ -203,7 +202,6 @@ class DNSResolver:
         # Try servers in order, with some randomization
         random.shuffle(available_servers)
 
-        last_error = None
         for server in available_servers:
             try:
                 response = await self._query_server_pooled(
@@ -217,7 +215,6 @@ class DNSResolver:
                 return response
 
             except Exception as e:
-                last_error = e
                 server.failure_count += 1
                 server.last_failure = time.time()
 
@@ -265,7 +262,6 @@ class DNSResolver:
 
         # Start with root servers
         nameservers = self.ROOT_SERVERS.copy()
-        current_zone = "."
 
         while nameservers and not context.is_expired():
             # Try each nameserver for the current zone
@@ -324,9 +320,9 @@ class DNSResolver:
                                                     new_nameservers.append(
                                                         answer.get_readable_rdata()
                                                     )
-                                        except Exception as e:
+                                        except Exception:
                                             logger.debug(
-                                                f"Failed to resolve nameserver {ns_name}: {e}"
+                                                f"Failed to resolve nameserver {ns_name}"
                                             )
 
                             if new_nameservers:
@@ -524,7 +520,7 @@ class DNSResolver:
             # Test connectivity
             try:
                 test_question = DNSQuestion("google.com.", DNSRecordType.A, DNSClass.IN)
-                response = await self._query_server_pooled(
+                await self._query_server_pooled(
                     server.address, server.port, test_question, 3.0
                 )
                 server_health["responsive"] = True

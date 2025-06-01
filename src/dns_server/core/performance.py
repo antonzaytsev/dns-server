@@ -13,11 +13,9 @@ import asyncio
 import functools
 import logging
 import time
-import weakref
 from collections import defaultdict, deque
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional, Set
+from typing import Any, Callable, Dict
 
 import psutil
 
@@ -247,7 +245,7 @@ def timing_decorator(operation_name: str, monitor: PerformanceMonitor):
                 try:
                     result = await func(*args, **kwargs)
                     return result
-                except Exception as e:
+                except Exception:
                     if monitor:
                         monitor.record_error(f"{operation_name}_error")
                     raise
@@ -265,7 +263,7 @@ def timing_decorator(operation_name: str, monitor: PerformanceMonitor):
                 try:
                     result = func(*args, **kwargs)
                     return result
-                except Exception as e:
+                except Exception:
                     if monitor:
                         monitor.record_error(f"{operation_name}_error")
                     raise
@@ -380,7 +378,7 @@ class ConnectionPool:
                         conn["socket"].close()
                         if self._monitor:
                             self._monitor.record_connection_event("closed")
-                    except:
+                    except Exception:
                         pass
 
 
@@ -426,7 +424,7 @@ class ConcurrencyLimiter:
             try:
                 self._semaphore.acquire_nowait()
                 acquired = True
-            except:
+            except Exception:
                 acquired = False
 
             if acquired:

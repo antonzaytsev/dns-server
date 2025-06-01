@@ -86,7 +86,7 @@ class CacheEntry:
 
 def generate_cache_key(question: DNSQuestion) -> str:
     """Generate standardized cache key from DNS question"""
-    return f"{question.name.lower()}:{question.qtype}:{question.qclass}"
+    return f"{question.name.lower()}: {question.qtype}: {question.qclass}"
 
 
 def create_negative_cache_entry(

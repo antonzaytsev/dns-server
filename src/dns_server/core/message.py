@@ -11,10 +11,9 @@ This module implements RFC 1035 compliant DNS message handling including:
 import logging
 import socket
 import struct
-import time
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
