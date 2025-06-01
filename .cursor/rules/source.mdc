@@ -1,0 +1,6 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+Use "source venv/bin/activate" to run python code.

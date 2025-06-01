@@ -64,8 +64,8 @@ class WebServer:
         self._setup_cors(app)
 
         # Add middleware
-        app.middlewares.append(self._logging_middleware)
-        app.middlewares.append(self._error_middleware)
+        app.middlewares.append(self._create_logging_middleware())
+        app.middlewares.append(self._create_error_middleware())
 
         return app
 
@@ -130,62 +130,77 @@ class WebServer:
 
         app.router.add_route("OPTIONS", "/{path:.*}", options_handler)
 
-    async def _logging_middleware(self, request, handler):
-        """Log HTTP requests."""
-        start_time = asyncio.get_event_loop().time()
+    def _create_logging_middleware(self):
+        """Create logging middleware."""
+        logger = self.logger
+        
+        @web.middleware
+        async def logging_middleware(request, handler):
+            """Log HTTP requests."""
+            start_time = asyncio.get_event_loop().time()
 
-        try:
-            response = await handler(request)
-            process_time = asyncio.get_event_loop().time() - start_time
+            try:
+                response = await handler(request)
+                process_time = asyncio.get_event_loop().time() - start_time
 
-            self.logger.info(
-                "HTTP request",
-                method=request.method,
-                path=request.path,
-                remote=request.remote,
-                status=response.status,
-                response_time_ms=round(process_time * 1000, 2),
-            )
+                logger.info(
+                    "HTTP request",
+                    method=request.method,
+                    path=request.path,
+                    remote=request.remote,
+                    status=response.status,
+                    response_time_ms=round(process_time * 1000, 2),
+                )
 
-            return response
+                return response
 
-        except Exception:
-            process_time = asyncio.get_event_loop().time() - start_time
+            except Exception:
+                process_time = asyncio.get_event_loop().time() - start_time
 
-            self.logger.error(
-                "HTTP request failed",
-                method=request.method,
-                path=request.path,
-                remote=request.remote,
-                error="An error occurred",
-                response_time_ms=round(process_time * 1000, 2),
-            )
-            raise
+                logger.error(
+                    "HTTP request failed",
+                    method=request.method,
+                    path=request.path,
+                    remote=request.remote,
+                    error="An error occurred",
+                    response_time_ms=round(process_time * 1000, 2),
+                )
+                raise
+        
+        return logging_middleware
 
-    async def _error_middleware(self, request, handler):
-        """Handle HTTP errors gracefully."""
-        try:
-            return await handler(request)
-        except web.HTTPException:
-            # Re-raise HTTP exceptions as they are handled properly by aiohttp
-            raise
-        except Exception as ex:
-            self.logger.error(
-                "Unhandled error in web server",
-                method=request.method,
-                path=request.path,
-                error=str(ex),
-            )
+    def _create_error_middleware(self):
+        """Create error handling middleware."""
+        logger = self.logger
+        config = self.config
+        
+        @web.middleware
+        async def error_middleware(request, handler):
+            """Handle HTTP errors gracefully."""
+            try:
+                return await handler(request)
+            except web.HTTPException:
+                # Re-raise HTTP exceptions as they are handled properly by aiohttp
+                raise
+            except Exception as ex:
+                logger.error(
+                    "Unhandled error in web server",
+                    method=request.method,
+                    path=request.path,
+                    error=str(ex),
+                )
 
-            return web.json_response(
-                {
-                    "error": "Internal server error",
-                    "message": str(ex)
-                    if self.config.debug
-                    else "An unexpected error occurred",
-                },
-                status=500,
-            )
+                return web.json_response(
+                    {
+                        "error": "Internal server error",
+                        "message": str(ex)
+                        if getattr(config, 'debug', False)
+                        else "An unexpected error occurred",
+                    },
+                    status=500,
+                )
+        
+        return error_middleware
 
     async def _websocket_handler(self, request):
         """Handle WebSocket connections."""
