@@ -170,6 +170,7 @@ class SecurityConfig:
     rate_limit_per_ip: int = 100
     allowed_networks: List[str] = field(default_factory=lambda: ["0.0.0.0/0"])
     blacklist_enabled: bool = True
+    debug_client_ip: bool = False
 
     def __post_init__(self) -> None:
         """Validate security configuration."""

@@ -6,11 +6,8 @@ services:
     container_name: dns-server
     restart: unless-stopped
 
-    # Port mappings
-    ports:
-      - "9953:9953/udp"    # DNS port (UDP)
-      - "9953:9953/tcp"    # DNS port (TCP)
-      - "9980:9980/tcp"    # Web interface port
+    # Use host networking to preserve client IPs
+    network_mode: host
 
     # Volume mounts
     volumes:
@@ -22,7 +19,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app/src
-      - DNS_SERVER_SERVER_BIND_ADDRESS=0.0.0.0  # Bind to all interfaces in container
+      - DNS_SERVER_SERVER_BIND_ADDRESS=0.0.0.0  # Bind to all interfaces with host networking
 
     # Health check
     healthcheck:
@@ -31,10 +28,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-    # Network configuration
-    networks:
-      - dns-network
 
     # Resource limits
     deploy:
@@ -60,12 +53,6 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
-
-# Network configuration
-networks:
-  dns-network:
-    driver: bridge
-    name: dns-network
 
 # Volume configuration
 volumes:

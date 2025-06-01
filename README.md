@@ -1,272 +1,256 @@
 # DNS Server
 
-A high-performance, configurable DNS server with real-time web interface and advanced caching capabilities.
+A high-performance, async DNS server written in Python with real-time monitoring and caching capabilities.
+
+## Features
+
+- **High Performance**: Built with asyncio for concurrent request handling
+- **Real-time Monitoring**: Web dashboard with live DNS query tracking
+- **Intelligent Caching**: Configurable DNS response caching with TTL management
+- **Security Features**: Rate limiting, network ACLs, and query validation
+- **Multiple Protocols**: Support for both UDP and TCP DNS queries
+- **Upstream Forwarding**: Configurable upstream DNS servers with failover
+- **Structured Logging**: JSON-formatted logs with request tracking
+- **Docker Support**: Containerized deployment with Docker Compose
+- **Health Checks**: Built-in health monitoring and metrics
 
 ## Quick Start
 
-### Method 1: Using Management Script (Recommended)
+### Using Docker Compose (Recommended)
 
-1. **Setup Environment**:
-```bash
-# Install Python 3.8 or higher
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd dns-server
+   ```
+
+2. **Start the DNS server**:
+   ```bash
+   docker-compose up -d
+   ```
+
+3. **Access the web dashboard**:
+   Open `http://localhost:9980` in your browser
+
+4. **Test DNS queries**:
+   ```bash
+   nslookup google.com 127.0.0.1 -port=9953
+   dig @127.0.0.1 -p 9953 example.com
+   ```
+
+### Client IP Logging
+
+#### Issue: All Client IPs Show the Same Address
+
+If you notice that all DNS queries in the dashboard show the same client IP (e.g., `192.168.147.1`), this is typically due to Docker networking configuration. The DNS server is receiving all requests through Docker's bridge network, masking the real client IPs.
+
+#### Solution 1: Use Host Networking (Recommended)
+
+The docker-compose.yml has been configured to use host networking mode, which allows the DNS server to see real client IPs:
+
+```yaml
+services:
+  dns-server:
+    network_mode: host
+    # ... other configuration
 ```
 
-2. **Start the Server**:
-```bash
-./scripts/dns-server.sh start
+With host networking:
+- ✅ Real client IPs are preserved
+- ✅ Better performance (no NAT overhead)
+- ⚠️ Container uses host's network stack directly
+
+#### Solution 2: Enable Debug Logging
+
+To troubleshoot client IP issues, enable detailed debugging in `config/default.yaml`:
+
+```yaml
+security:
+  debug_client_ip: true  # Enable detailed client IP debugging logs
 ```
 
-3. **Check Status**:
-```bash
-./scripts/dns-server.sh status
-```
+This will log detailed information about each connection including:
+- Raw socket addresses
+- Transport information
+- Connection metadata
 
-4. **View Logs**:
-```bash
-./scripts/dns-server.sh logs
-```
+#### Solution 3: Alternative Docker Networking
 
-5. **Stop the Server**:
-```bash
-./scripts/dns-server.sh stop
-```
+If you cannot use host networking, you can try these alternatives:
 
-### Method 2: Using Docker Compose
+1. **Bridge with published ports** (less ideal):
+   ```yaml
+   services:
+     dns-server:
+       ports:
+         - "9953:9953/udp"
+         - "9953:9953/tcp"
+         - "9980:9980/tcp"
+       # Note: This may still show Docker gateway IP
+   ```
 
-1. **Start with Docker Compose**:
-```bash
-docker-compose up -d
-```
+2. **Custom bridge network with IP forwarding**:
+   ```yaml
+   networks:
+     dns-network:
+       driver: bridge
+       driver_opts:
+         com.docker.network.bridge.enable_ip_masquerade: "false"
+   ```
 
-2. **Check Status**:
-```bash
-docker-compose ps
-docker-compose logs dns-server
-```
+#### Verifying Client IP Detection
 
-3. **Stop the Server**:
-```bash
-docker-compose down
-```
-
-## Management Scripts
-
-### Bash Script Commands
-
-The `scripts/dns-server.sh` script provides easy server management:
+After making changes, restart the DNS server and test with queries from different machines:
 
 ```bash
-# Server operations
-./scripts/dns-server.sh start           # Start the DNS server
-./scripts/dns-server.sh stop            # Stop the DNS server
-./scripts/dns-server.sh restart         # Restart the DNS server
-./scripts/dns-server.sh status          # Show detailed server status
+# From machine 1
+nslookup google.com <your-server-ip> -port=9953
 
-# Log management
-./scripts/dns-server.sh logs            # Show last 50 lines of logs
-./scripts/dns-server.sh logs 100        # Show last 100 lines of logs
-./scripts/dns-server.sh logs follow     # Follow logs in real-time
-
-# Help
-./scripts/dns-server.sh                 # Show usage information
+# From machine 2
+dig @<your-server-ip> -p 9953 example.com
 ```
 
-### Docker Compose Commands
-
-For containerized deployment:
-
-```bash
-# Basic operations
-docker-compose up -d                    # Start in background
-docker-compose down                     # Stop and remove containers
-docker-compose restart dns-server       # Restart DNS server service
-docker-compose logs -f dns-server       # Follow logs in real-time
-
-# Management
-docker-compose exec dns-server bash     # Shell into container
-docker-compose ps                       # Show container status
-docker-compose pull && docker-compose up -d  # Update and restart
-```
-
-## Server Access
-
-When running, the DNS server is accessible at:
-- **DNS queries**: `127.0.0.1:9953` (UDP/TCP)
-- **Web interface**: `http://127.0.0.1:9980`
+Check the web dashboard at `http://<your-server-ip>:9980` to verify that different client IPs are now being logged correctly.
 
 ## Configuration
 
-### Custom Configuration
+### Basic Configuration
 
-Edit `config/default.yaml` to customize server settings:
+Edit `config/default.yaml` to customize the DNS server:
 
-- **DNS Port**: Change `server.dns_port` (default: 9953)
-- **Web Port**: Change `server.web_port` (default: 9980)
-- **Bind Address**: Change `server.bind_address`
-- **Upstream Servers**: Modify `upstream_servers` list
-- **Cache Size**: Adjust `cache.max_size_mb`
-- **Web Interface**: Enable/disable with `web.enabled`
+```yaml
+# Server Configuration
+server:
+  bind_address: "0.0.0.0"  # Bind to all interfaces
+  dns_port: 9953           # DNS server port
+  web_port: 9980           # Web dashboard port
 
-After editing configuration:
-```bash
-# With management script
-./scripts/dns-server.sh restart
+# Upstream DNS Servers
+upstream_servers:
+  - "8.8.8.8"        # Google DNS
+  - "1.1.1.1"        # Cloudflare DNS
+  - "208.67.222.222" # OpenDNS
 
-# With Docker Compose
-docker-compose restart dns-server
+# Security Configuration
+security:
+  rate_limit_per_ip: 100      # Max queries per IP per minute
+  debug_client_ip: false      # Enable client IP debugging
+  allowed_networks: ["0.0.0.0/0"]  # Allowed networks (CIDR)
 ```
 
-## Testing DNS Queries
+### Advanced Configuration
 
-Once the server is running, test it with `dig` or `nslookup`:
+See the complete configuration schema in `src/dns_server/config/schema.py` for all available options including:
+- Cache settings (size, TTL)
+- Logging configuration
+- Performance tuning
+- Security features
 
+## Development
+
+### Local Development
+
+1. **Create virtual environment**:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Run the server**:
+   ```bash
+   python -m src.dns_server.main --config config/default.yaml
+   ```
+
+### Testing
+
+Run the test suite:
 ```bash
-# Using dig
-dig @127.0.0.1 -p 9953 google.com
-
-# Using nslookup
-nslookup google.com 127.0.0.1
+pytest src/tests/
 ```
 
-## Advanced Usage
-
-### Manual Server Start (Development)
-
-For development or debugging, start the server manually:
-
-```bash
-# Activate virtual environment
-source venv/bin/activate
-
-# Start with default config
-python src/dns_server/main.py
-
-# Start with custom config
-python src/dns_server/main.py --config /path/to/config.yaml
-
-# Health check
-python src/dns_server/main.py --health-check
-
-# Performance statistics
-python src/dns_server/main.py --performance-stats
-```
-
-### Performance Testing
-
-Run the included performance test:
+Run performance tests:
 ```bash
 python test_performance.py
 ```
 
-### Docker Development
+## Monitoring and Logging
 
-Build and run with custom settings:
-```bash
-# Build image
-docker build -t dns-server .
+### Web Dashboard
 
-# Run with custom ports
-docker run -p 9953:9953/udp -p 9953:9953/tcp -p 9980:9980 dns-server
+The web dashboard provides real-time monitoring:
+- Live DNS query stream
+- Performance metrics
+- Cache statistics
+- Server health status
 
-# Run with custom config volume
-docker run -v $(pwd)/config:/app/config dns-server
+### Structured Logging
+
+All logs are output in JSON format for easy parsing:
+
+```json
+{
+  "timestamp": "2024-01-15T10:30:45Z",
+  "request_id": "abc123",
+  "client_ip": "192.168.1.100",
+  "query_type": "A",
+  "domain": "example.com",
+  "response_code": "NOERROR",
+  "response_time_ms": 45.2,
+  "cache_hit": false,
+  "upstream_server": "8.8.8.8"
+}
 ```
 
-## Web Interface
+### Health Checks
 
-Access the comprehensive web interface at `http://127.0.0.1:9980` for:
-
-### Real-Time Monitoring
-- Live DNS query feed with real-time updates via WebSocket
-- Server status and uptime monitoring
-- Connection status indicators
-- Automatic refresh with manual refresh option
-
-### Performance Analytics
-- **Interactive Charts**: Query type distribution, cache hit/miss ratios, response time trends
-- **DNS Statistics**: Total queries, UDP/TCP breakdown, error counts, queries per second
-- **Cache Performance**: Hit ratios, memory usage, entry counts
-- **System Metrics**: Memory usage, CPU statistics, connection counts
-
-### Cache Management
-- **Flush Operations**: Remove expired cache entries
-- **Clear Cache**: Remove all cached entries with confirmation
-- **Domain-Specific Flush**: Target specific domains for cache removal
-- **Real-time Cache Statistics**: Current size, hit ratios, memory usage
-
-### Query Analysis
-- **Searchable Query History**: Filter by domain, IP, query type, or response code
-- **Detailed Query Information**: Timestamps, client IPs, response times, cache status
-- **Auto-scroll**: Automatically follow new queries as they arrive
-- **Export Capability**: Download query data for analysis
-
-### User Experience Features
-- **Dark/Light Theme**: Toggle between themes with persistent preference
-- **Responsive Design**: Works on desktop, tablet, and mobile devices
-- **Toast Notifications**: Real-time feedback for actions and events
-- **Keyboard Navigation**: Full keyboard accessibility support
-
-### API Access
-The web interface also exposes REST API endpoints:
-- `GET /api/status` - Server status and comprehensive statistics
-- `GET /api/cache/stats` - Detailed cache performance metrics
-- `POST /api/cache/flush` - Flush cache operations
-- `GET /api/logs` - Query log history with filtering
-- `GET /metrics` - Prometheus-compatible metrics
-
-## Features
-
-- **High Performance**: Optimized with uvloop and connection pooling
-- **Advanced Caching**: Intelligent DNS response caching with TTL management
-- **Real-Time Web Interface**: Modern dashboard with live updates and analytics
-- **Security**: Rate limiting, network filtering, and access controls
-- **Comprehensive Monitoring**: Built-in health checks, performance metrics, and alerting
-- **Flexible Configuration**: Configurable upstream servers, resolution modes, and all parameters
-- **API Integration**: REST API and WebSocket support for custom integrations
-- **Production Ready**: Structured logging, graceful shutdown, and error handling
-- **Easy Management**: Simple scripts and Docker support for deployment
-
-## Common Use Cases
-
-### Development DNS Server
-Use as a local DNS server for development with custom configurations and real-time monitoring.
-
-### DNS Proxy with Analytics
-Forward DNS queries to multiple upstream servers with intelligent caching and comprehensive analytics.
-
-### Performance Testing and Monitoring
-Benchmark DNS resolution performance with built-in monitoring tools and real-time dashboards.
-
-### Network Troubleshooting
-Monitor DNS traffic patterns, identify slow queries, and analyze cache effectiveness.
+Check server health:
+```bash
+python -m src.dns_server.main --health-check
+```
 
 ## Troubleshooting
 
-### Script Issues
-- **Permission denied**: Run `chmod +x scripts/dns-server.sh`
-- **Python not found**: Ensure Python 3.8+ is installed and in PATH
-- **Virtual environment missing**: Run setup commands in Quick Start
+### Common Issues
 
-### Docker Issues
-- **Port conflicts**: Check if ports 9953 or 9980 are already in use
-- **Permission denied**: Ensure Docker daemon is running and user has permissions
-- **Build failures**: Check Dockerfile and ensure all files are present
+1. **Permission denied on port 53**:
+   - Use non-privileged ports (like 9953) for development
+   - Run with sudo for privileged ports in production
 
-### Web Interface Not Loading
-- Check that the web port (default 9980) is not in use by another application
-- Verify the web interface is enabled in configuration (`web.enabled: true`)
-- Check firewall settings if accessing from another machine
+2. **Client IPs not showing correctly**:
+   - Use host networking mode in Docker
+   - Enable debug_client_ip for troubleshooting
 
-### DNS Queries Not Working
-- Ensure the DNS port (default 9953) is accessible
-- Check upstream server connectivity
-- Verify network configuration and routing
+3. **High memory usage**:
+   - Adjust cache size in configuration
+   - Monitor cache hit ratios
 
-### Performance Issues
-- Monitor cache hit ratios in the web interface
-- Check system resource usage
-- Review upstream server response times
-- Consider adjusting cache size and TTL settings
+4. **Slow query responses**:
+   - Check upstream server latency
+   - Review cache configuration
+   - Monitor resource usage
+
+### Debug Mode
+
+Enable debug logging for detailed troubleshooting:
+
+```yaml
+logging:
+  level: "DEBUG"
+```
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request

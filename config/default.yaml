@@ -3,7 +3,7 @@
 
 # Server Configuration
 server:
-  bind_address: "127.0.0.1"
+  bind_address: "0.0.0.0"  # Bind to all interfaces for host networking
   dns_port: 9953  # Non-privileged port for development
   web_port: 9980
   workers: 4
@@ -42,6 +42,7 @@ security:
   rate_limit_per_ip: 100           # Maximum queries per IP per minute
   allowed_networks: ["0.0.0.0/0"]  # Allowed networks in CIDR notation
   blacklist_enabled: true          # Enable domain blacklisting
+  debug_client_ip: false           # Enable detailed client IP debugging logs
 
 # Web Interface Configuration
 web:

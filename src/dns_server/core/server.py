@@ -93,7 +93,9 @@ class DNSUDPProtocol(asyncio.DatagramProtocol):
 
     def datagram_received(self, data: bytes, addr: Tuple[str, int]):
         """Handle incoming UDP DNS queries"""
-        client_ip = addr[0]
+        client_ip, debug_info = _extract_client_ip(
+            addr, self.transport, {"protocol": "UDP"}, self.server.config
+        )
 
         # Create task to handle the request asynchronously
         task = asyncio.create_task(self._handle_request(data, client_ip, addr))
@@ -242,7 +244,13 @@ class DNSServer:
     ):
         """Handle TCP DNS client connection with concurrency limiting"""
         client_addr = writer.get_extra_info("peername")
-        client_ip = client_addr[0] if client_addr else "unknown"
+        if client_addr:
+            client_ip, debug_info = _extract_client_ip(
+                client_addr, writer.transport, {"protocol": "TCP"}, self.config
+            )
+        else:
+            client_ip = "unknown"
+            debug_info = {"error": "No peername available", "protocol": "TCP"}
 
         try:
             # Apply concurrency limiting for TCP connections
@@ -253,6 +261,7 @@ class DNSServer:
                 "TCP connection rejected due to backpressure",
                 client_ip=client_ip,
                 error=str(e),
+                **debug_info,
             )
             # Log security event for potential DDoS
             log_security_event("backpressure_rejection", client_ip)
@@ -689,3 +698,71 @@ class DNSServer:
             health["cache"] = cache_health
 
         return health
+
+
+def _extract_client_ip(
+    addr: Tuple[str, int],
+    transport=None,
+    extra_info: Dict[str, Any] = None,
+    config=None,
+) -> Tuple[str, Dict[str, Any]]:
+    """Extract client IP with detailed debugging information.
+
+    Args:
+        addr: Address tuple from socket connection
+        transport: Transport object (optional)
+        extra_info: Additional connection info (optional)
+        config: DNS server config (optional)
+
+    Returns:
+        Tuple of (client_ip, debug_info)
+    """
+    client_ip = addr[0]
+    debug_info = {
+        "raw_address": str(addr),
+        "extracted_ip": client_ip,
+        "source": "socket_address",
+    }
+
+    # Add transport information if available
+    if transport:
+        try:
+            sock_info = transport.get_extra_info("socket")
+            if sock_info:
+                debug_info["socket_family"] = (
+                    sock_info.family.name
+                    if hasattr(sock_info.family, "name")
+                    else str(sock_info.family)
+                )
+                debug_info["socket_type"] = (
+                    sock_info.type.name
+                    if hasattr(sock_info.type, "name")
+                    else str(sock_info.type)
+                )
+
+            peername = transport.get_extra_info("peername")
+            if peername:
+                debug_info["peername"] = str(peername)
+
+            sockname = transport.get_extra_info("sockname")
+            if sockname:
+                debug_info["sockname"] = str(sockname)
+
+        except Exception as e:
+            debug_info["transport_error"] = str(e)
+
+    # Add extra info if provided
+    if extra_info:
+        debug_info.update(extra_info)
+
+    # Log detailed IP information for debugging (only when enabled in config)
+    should_debug = False
+    if config and hasattr(config, "security"):
+        should_debug = getattr(config.security, "debug_client_ip", False)
+
+    if should_debug:
+        logger = _get_logger()
+        if logger and hasattr(logger, "debug"):
+            logger.debug("Client IP extraction details", **debug_info)
+
+    return client_ip, debug_info
