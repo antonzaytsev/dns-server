@@ -1,6 +1,6 @@
 /**
  * WebSocket Manager for DNS Server Dashboard
- * 
+ *
  * Handles real-time communication with the DNS server backend
  * for live updates, status changes, and query monitoring.
  */
@@ -222,7 +222,7 @@ class WebSocketManager {
 
         if (statusDot && statusText) {
             statusDot.className = 'status-dot';
-            
+
             switch (status) {
                 case 'connected':
                     statusDot.classList.add('connected');
@@ -279,7 +279,7 @@ class WebSocketManager {
     handleDnsQuery(message) {
         // Add to query buffer
         this.queryBuffer.unshift(message.query);
-        
+
         // Limit buffer size
         if (this.queryBuffer.length > this.maxQueryBuffer) {
             this.queryBuffer = this.queryBuffer.slice(0, this.maxQueryBuffer);
@@ -306,7 +306,7 @@ class WebSocketManager {
      */
     handleCacheEvent(message) {
         console.log('Cache event:', message.event_type, message.data);
-        
+
         // Show notification for cache operations
         switch (message.event_type) {
             case 'cleared':
@@ -323,7 +323,7 @@ class WebSocketManager {
      */
     handleServerEvent(message) {
         console.log('Server event:', message.event_type, message.message);
-        
+
         // Show notification for important server events
         const eventType = message.event_type;
         if (eventType === 'error' || eventType === 'warning') {
@@ -431,11 +431,11 @@ window.wsManager = new WebSocketManager();
 // Auto-connect when script loads
 document.addEventListener('DOMContentLoaded', () => {
     window.wsManager.connect();
-    
+
     // Set up periodic ping to keep connection alive
     setInterval(() => {
         if (window.wsManager.isConnected) {
             window.wsManager.ping();
         }
     }, 30000); // Ping every 30 seconds
-}); 
+});

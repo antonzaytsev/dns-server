@@ -1,6 +1,6 @@
 /**
  * DNS Server Dashboard Controller
- * 
+ *
  * Main controller for the DNS server dashboard interface.
  * Manages data updates, user interactions, API calls, and UI state.
  */
@@ -30,15 +30,15 @@ class DNSDashboard {
      */
     init() {
         console.log('Initializing DNS Dashboard');
-        
+
         this.setupEventListeners();
         this.loadTheme();
         this.fetchInitialData();
         this.startAutoRefresh();
-        
+
         // Show loading overlay initially
         this.showLoading();
-        
+
         // Hide loading after initial load
         setTimeout(() => {
             this.hideLoading();
@@ -240,7 +240,7 @@ class DNSDashboard {
         // Update server info
         this.updateElement('server-status', data.server?.status || 'Unknown');
         this.updateElement('server-version', data.server?.version || '-');
-        
+
         // Calculate and display uptime
         if (data.server?.uptime_seconds) {
             const uptime = this.formatUptime(data.server.uptime_seconds);
@@ -271,10 +271,10 @@ class DNSDashboard {
         if (data.cache) {
             this.updateElement('cache-hits', data.cache.cache_hits || 0);
             this.updateElement('cache-misses', data.cache.cache_misses || 0);
-            
+
             const hitRatio = data.cache.hit_ratio || 0;
             this.updateElement('cache-hit-ratio', (hitRatio * 100).toFixed(1) + '%');
-            
+
             this.updateElement('cache-memory', (data.cache.current_memory_mb || 0).toFixed(1) + ' MB');
         }
 
@@ -410,7 +410,7 @@ class DNSDashboard {
     clearQueries() {
         this.queries = [];
         this.renderQueries();
-        
+
         // Clear charts data
         if (window.chartsManager) {
             window.chartsManager.clearAllData();
@@ -598,4 +598,4 @@ window.addEventListener('beforeunload', () => {
     if (window.dashboard) {
         window.dashboard.destroy();
     }
-}); 
+});

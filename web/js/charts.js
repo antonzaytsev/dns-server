@@ -1,6 +1,6 @@
 /**
  * Charts Manager for DNS Server Dashboard
- * 
+ *
  * Manages Chart.js visualizations for DNS server statistics,
  * including query types, cache performance, and response times.
  */
@@ -21,10 +21,10 @@ class ChartsManager {
         // Data storage for time series
         this.responseTimeData = [];
         this.maxDataPoints = 50;
-        
+
         // Query type tracking
         this.queryTypes = {};
-        
+
         this.isDarkMode = false;
     }
 
@@ -36,7 +36,7 @@ class ChartsManager {
         this.initQueryTypesChart();
         this.initCacheRatioChart();
         this.initResponseTimeChart();
-        
+
         // Listen for theme changes
         document.addEventListener('themeChanged', (e) => {
             this.isDarkMode = e.detail.isDark;
@@ -336,7 +336,7 @@ class ChartsManager {
         // Update chart
         this.charts.responseTime.data.labels = this.responseTimeData.map(d => d.time);
         this.charts.responseTime.data.datasets[0].data = this.responseTimeData.map(d => d.value);
-        
+
         this.charts.responseTime.update('none');
     }
 
@@ -362,7 +362,7 @@ class ChartsManager {
     updateCharts(dnsStats, cacheStats) {
         this.updateQueryTypesChart(dnsStats);
         this.updateCacheRatioChart(cacheStats);
-        
+
         if (dnsStats && dnsStats.average_response_time !== undefined) {
             this.updateResponseTimeChart(dnsStats.average_response_time);
         }
@@ -518,4 +518,4 @@ document.addEventListener('DOMContentLoaded', () => {
             window.chartsManager.resizeCharts();
         }, 100);
     });
-}); 
+});
