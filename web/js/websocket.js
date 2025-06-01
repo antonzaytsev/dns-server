@@ -94,7 +94,6 @@ class WebSocketManager {
     onMessage(event) {
         try {
             const message = JSON.parse(event.data);
-            console.log('WebSocket message:', message.type, message);
 
             // Update last update time
             this.updateLastUpdateTime();
