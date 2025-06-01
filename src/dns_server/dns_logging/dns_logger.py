@@ -6,15 +6,83 @@ specified in the requirements, including request ID tracking and performance tim
 """
 
 import asyncio
+import json
+import logging
+import logging.handlers
 import time
 import uuid
 from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from dns import message, rcode
 
 from .logger import get_logger
+
+
+class DNSFileLogger:
+    """Specialized logger that writes DNS queries to logs/dns-server.log in JSON format."""
+
+    def __init__(self, log_file_path: str = "logs/dns-server.log"):
+        """Initialize DNS file logger.
+
+        Args:
+            log_file_path: Path to the DNS log file
+        """
+        self.log_file_path = log_file_path
+        self._setup_file_logger()
+
+    def _setup_file_logger(self) -> None:
+        """Setup dedicated file logger for DNS queries."""
+        # Ensure log directory exists
+        log_path = Path(self.log_file_path)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Create dedicated logger for DNS file output
+        self.file_logger = logging.getLogger("dns_file_logger")
+        self.file_logger.handlers.clear()
+        self.file_logger.setLevel(logging.INFO)
+        self.file_logger.propagate = False  # Prevent duplicate console output
+
+        # File handler with rotation
+        file_handler = logging.handlers.RotatingFileHandler(
+            filename=self.log_file_path,
+            maxBytes=100 * 1024 * 1024,  # 100MB
+            backupCount=5,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(logging.INFO)
+
+        # Custom formatter that outputs exact JSON format
+        class DNSJSONFormatter(logging.Formatter):
+            def format(self, record):
+                return record.getMessage()
+
+        file_handler.setFormatter(DNSJSONFormatter())
+        self.file_logger.addHandler(file_handler)
+
+    def log_dns_query(self, domain: str, ip_addresses: List[str]) -> None:
+        """Log DNS query in the specified JSON format.
+
+        Args:
+            domain: Domain name that was queried
+            ip_addresses: List of IP addresses returned
+        """
+        # Format datetime as "YYYY-MM-DD HH:MM:SS UTC"
+        current_time = datetime.now(timezone.utc)
+        formatted_datetime = current_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        # Create log entry in exact format specified
+        log_entry = {
+            "datetime": formatted_datetime,
+            "domain": domain.rstrip("."),  # Remove trailing dot if present
+            "ip_address": ip_addresses,
+        }
+
+        # Write as single JSON line
+        json_line = json.dumps(log_entry, separators=(",", ":"))
+        self.file_logger.info(json_line)
 
 
 class DNSRequestLogger:
@@ -23,6 +91,8 @@ class DNSRequestLogger:
     def __init__(self):
         """Initialize DNS logger."""
         self.logger = get_logger("dns_requests")
+        # Initialize specialized file logger for DNS queries
+        self.file_logger = DNSFileLogger()
 
     def log_dns_request(
         self,
@@ -69,8 +139,31 @@ class DNSRequestLogger:
         if error:
             log_entry["error"] = error
 
-        # Log the entry
+        # Log the entry to console/structured logs
         self.logger.info("DNS request processed", **log_entry)
+
+        # Log to specialized DNS file if successful query with IP addresses
+        if (
+            not error
+            and response_code == "NOERROR"
+            and response_data
+            and query_type in ["A", "AAAA"]
+        ):  # Only log A and AAAA records with IPs
+            # Extract IP addresses from response data
+            ip_addresses = []
+            for data in response_data:
+                # For A/AAAA records, the response data should be IP addresses
+                # Handle both "domain IP" and just "IP" formats
+                parts = data.split()
+                if len(parts) >= 2:
+                    # Format: "example.com. 1.2.3.4"
+                    ip_addresses.append(parts[-1])
+                elif len(parts) == 1:
+                    # Format: "1.2.3.4"
+                    ip_addresses.append(parts[0])
+
+            if ip_addresses:
+                self.file_logger.log_dns_query(domain, ip_addresses)
 
     def log_dns_error(
         self,
@@ -399,33 +492,100 @@ def format_response_data(answer_section: Any, query_type: str) -> List[str]:
         if not answer_section:
             return response_data
 
+        # Handle different types of answer_section structures
         for rrset in answer_section:
-            for rr in rrset:
-                if query_type == "A":
-                    response_data.append(str(rr))
-                elif query_type == "AAAA":
-                    response_data.append(str(rr))
-                elif query_type == "CNAME":
-                    response_data.append(str(rr.target).rstrip("."))
-                elif query_type == "MX":
-                    response_data.append(
-                        f"{rr.preference} {str(rr.exchange).rstrip('.')}"
+            # Check if rrset is iterable (list/tuple) or a single record
+            if hasattr(rrset, "__iter__") and not isinstance(rrset, str):
+                records = rrset
+            else:
+                records = [rrset]
+
+            for rr in records:
+                try:
+                    if query_type == "A":
+                        # For A records, convert 4-byte binary to IPv4 address
+                        if hasattr(rr, "rdata") and len(rr.rdata) == 4:
+                            # Convert 4 bytes to IP address
+                            ip_bytes = rr.rdata
+                            ip_address = f"{ip_bytes[0]}.{ip_bytes[1]}.{ip_bytes[2]}.{ip_bytes[3]}"
+                            response_data.append(ip_address)
+                        elif hasattr(rr, "address"):
+                            response_data.append(str(rr.address))
+                        else:
+                            # Try to parse the string representation
+                            rr_str = str(rr).strip()
+                            # Look for IP pattern in the string
+                            import re
+
+                            ip_pattern = r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"
+                            ip_match = re.search(ip_pattern, rr_str)
+                            if ip_match:
+                                response_data.append(ip_match.group())
+                            else:
+                                response_data.append(rr_str)
+                    elif query_type == "AAAA":
+                        # For AAAA records, convert 16-byte binary to IPv6 address
+                        if hasattr(rr, "rdata") and len(rr.rdata) == 16:
+                            # Convert 16 bytes to IPv6 address
+                            import socket
+
+                            ip_address = socket.inet_ntop(socket.AF_INET6, rr.rdata)
+                            response_data.append(ip_address)
+                        elif hasattr(rr, "address"):
+                            response_data.append(str(rr.address))
+                        else:
+                            response_data.append(str(rr).strip())
+                    elif query_type == "CNAME":
+                        if hasattr(rr, "target"):
+                            response_data.append(str(rr.target).rstrip("."))
+                        else:
+                            response_data.append(str(rr).strip())
+                    elif query_type == "MX":
+                        if hasattr(rr, "preference") and hasattr(rr, "exchange"):
+                            response_data.append(
+                                f"{rr.preference} {str(rr.exchange).rstrip('.')}"
+                            )
+                        else:
+                            response_data.append(str(rr).strip())
+                    elif query_type == "TXT":
+                        if hasattr(rr, "strings"):
+                            response_data.append(
+                                " ".join(b.decode("utf-8") for b in rr.strings)
+                            )
+                        else:
+                            response_data.append(str(rr).strip())
+                    elif query_type == "NS":
+                        if hasattr(rr, "target"):
+                            response_data.append(str(rr.target).rstrip("."))
+                        else:
+                            response_data.append(str(rr).strip())
+                    elif query_type == "PTR":
+                        if hasattr(rr, "target"):
+                            response_data.append(str(rr.target).rstrip("."))
+                        else:
+                            response_data.append(str(rr).strip())
+                    elif query_type == "SOA":
+                        if hasattr(rr, "mname") and hasattr(rr, "rname"):
+                            response_data.append(
+                                f"{str(rr.mname).rstrip('.')} {str(rr.rname).rstrip('.')} "
+                                f"{rr.serial} {rr.refresh} {rr.retry} {rr.expire} {rr.minimum}"
+                            )
+                        else:
+                            response_data.append(str(rr).strip())
+                    else:
+                        response_data.append(str(rr).strip())
+                except Exception as record_error:
+                    # Log individual record error but continue processing
+                    logger = get_logger("dns_formatter")
+                    logger.debug(
+                        f"Failed to format individual record: {record_error}, "
+                        f"record: {rr}, query_type: {query_type}"
                     )
-                elif query_type == "TXT":
-                    response_data.append(
-                        " ".join(b.decode("utf-8") for b in rr.strings)
-                    )
-                elif query_type == "NS":
-                    response_data.append(str(rr.target).rstrip("."))
-                elif query_type == "PTR":
-                    response_data.append(str(rr.target).rstrip("."))
-                elif query_type == "SOA":
-                    response_data.append(
-                        f"{str(rr.mname).rstrip('.')} {str(rr.rname).rstrip('.')} "
-                        f"{rr.serial} {rr.refresh} {rr.retry} {rr.expire} {rr.minimum}"
-                    )
-                else:
-                    response_data.append(str(rr))
+                    # Fallback to string conversion
+                    try:
+                        response_data.append(str(rr).strip())
+                    except:
+                        pass  # Skip this record entirely if it can't be converted
 
     except Exception as e:
         # Log formatting error but don't fail
