@@ -4,37 +4,104 @@ A high-performance, configurable DNS server with real-time web interface and adv
 
 ## Quick Start
 
-### Installation
+### Method 1: Using Management Script (Recommended)
 
-1. Install Python 3.8 or higher
-2. Install dependencies:
+1. **Setup Environment**:
 ```bash
+# Install Python 3.8 or higher
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Basic Usage
-
-Start the DNS server with default settings:
+2. **Start the Server**:
 ```bash
-python src/dns_server/main.py
+./scripts/dns-server.sh start
 ```
 
-The server will start on:
-- **DNS queries**: `127.0.0.1:5353`
+3. **Check Status**:
+```bash
+./scripts/dns-server.sh status
+```
+
+4. **View Logs**:
+```bash
+./scripts/dns-server.sh logs
+```
+
+5. **Stop the Server**:
+```bash
+./scripts/dns-server.sh stop
+```
+
+### Method 2: Using Docker Compose
+
+1. **Start with Docker Compose**:
+```bash
+docker-compose up -d
+```
+
+2. **Check Status**:
+```bash
+docker-compose ps
+docker-compose logs dns-server
+```
+
+3. **Stop the Server**:
+```bash
+docker-compose down
+```
+
+## Management Scripts
+
+### Bash Script Commands
+
+The `scripts/dns-server.sh` script provides easy server management:
+
+```bash
+# Server operations
+./scripts/dns-server.sh start           # Start the DNS server
+./scripts/dns-server.sh stop            # Stop the DNS server
+./scripts/dns-server.sh restart         # Restart the DNS server
+./scripts/dns-server.sh status          # Show detailed server status
+
+# Log management
+./scripts/dns-server.sh logs            # Show last 50 lines of logs
+./scripts/dns-server.sh logs 100        # Show last 100 lines of logs
+./scripts/dns-server.sh logs follow     # Follow logs in real-time
+
+# Help
+./scripts/dns-server.sh                 # Show usage information
+```
+
+### Docker Compose Commands
+
+For containerized deployment:
+
+```bash
+# Basic operations
+docker-compose up -d                    # Start in background
+docker-compose down                     # Stop and remove containers
+docker-compose restart dns-server       # Restart DNS server service
+docker-compose logs -f dns-server       # Follow logs in real-time
+
+# Management
+docker-compose exec dns-server bash     # Shell into container
+docker-compose ps                       # Show container status
+docker-compose pull && docker-compose up -d  # Update and restart
+```
+
+## Server Access
+
+When running, the DNS server is accessible at:
+- **DNS queries**: `127.0.0.1:5353` (UDP/TCP)
 - **Web interface**: `http://127.0.0.1:8080`
 
 ## Configuration
 
 ### Custom Configuration
 
-Use a custom configuration file:
-```bash
-python src/dns_server/main.py --config /path/to/your/config.yaml
-```
-
-### Default Configuration
-
-The server uses `config/default.yaml` by default. Key settings you can modify:
+Edit `config/default.yaml` to customize server settings:
 
 - **DNS Port**: Change `server.dns_port` (default: 5353)
 - **Web Port**: Change `server.web_port` (default: 8080)
@@ -43,25 +110,16 @@ The server uses `config/default.yaml` by default. Key settings you can modify:
 - **Bind Address**: Change `server.bind_address`
 - **Web Interface**: Enable/disable with `web.enabled`
 
-## Command Examples
-
-### Start with Custom Port
+After editing configuration:
 ```bash
-# Edit config/default.yaml to change dns_port to 5353
-python src/dns_server/main.py --config config/default.yaml
+# With management script
+./scripts/dns-server.sh restart
+
+# With Docker Compose
+docker-compose restart dns-server
 ```
 
-### Health Check
-```bash
-python src/dns_server/main.py --health-check
-```
-
-### Performance Statistics
-```bash
-python src/dns_server/main.py --performance-stats
-```
-
-### Testing DNS Queries
+## Testing DNS Queries
 
 Once the server is running, test it with `dig` or `nslookup`:
 
@@ -71,6 +129,50 @@ dig @127.0.0.1 -p 5353 google.com
 
 # Using nslookup
 nslookup google.com 127.0.0.1
+```
+
+## Advanced Usage
+
+### Manual Server Start (Development)
+
+For development or debugging, start the server manually:
+
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Start with default config
+python src/dns_server/main.py
+
+# Start with custom config
+python src/dns_server/main.py --config /path/to/config.yaml
+
+# Health check
+python src/dns_server/main.py --health-check
+
+# Performance statistics
+python src/dns_server/main.py --performance-stats
+```
+
+### Performance Testing
+
+Run the included performance test:
+```bash
+python test_performance.py
+```
+
+### Docker Development
+
+Build and run with custom settings:
+```bash
+# Build image
+docker build -t dns-server .
+
+# Run with custom ports
+docker run -p 5353:5353/udp -p 5353:5353/tcp -p 8080:8080 dns-server
+
+# Run with custom config volume
+docker run -v $(pwd)/config:/app/config dns-server
 ```
 
 ## Web Interface
@@ -115,13 +217,6 @@ The web interface also exposes REST API endpoints:
 - `GET /api/logs` - Query log history with filtering
 - `GET /metrics` - Prometheus-compatible metrics
 
-## Performance Testing
-
-Run the included performance test:
-```bash
-python test_performance.py
-```
-
 ## Features
 
 - **High Performance**: Optimized with uvloop and connection pooling
@@ -132,14 +227,7 @@ python test_performance.py
 - **Flexible Configuration**: Configurable upstream servers, resolution modes, and all parameters
 - **API Integration**: REST API and WebSocket support for custom integrations
 - **Production Ready**: Structured logging, graceful shutdown, and error handling
-
-## Stopping the Server
-
-Stop the server gracefully with `Ctrl+C` or send a SIGTERM signal. The server will:
-- Complete ongoing DNS requests
-- Save cache state (if persistence is enabled)
-- Close all connections properly
-- Stop background tasks cleanly
+- **Easy Management**: Simple scripts and Docker support for deployment
 
 ## Common Use Cases
 
@@ -156,6 +244,16 @@ Benchmark DNS resolution performance with built-in monitoring tools and real-tim
 Monitor DNS traffic patterns, identify slow queries, and analyze cache effectiveness.
 
 ## Troubleshooting
+
+### Script Issues
+- **Permission denied**: Run `chmod +x scripts/dns-server.sh`
+- **Python not found**: Ensure Python 3.8+ is installed and in PATH
+- **Virtual environment missing**: Run setup commands in Quick Start
+
+### Docker Issues
+- **Port conflicts**: Check if ports 5353 or 8080 are already in use
+- **Permission denied**: Ensure Docker daemon is running and user has permissions
+- **Build failures**: Check Dockerfile and ensure all files are present
 
 ### Web Interface Not Loading
 - Check that the web port (default 8080) is not in use by another application

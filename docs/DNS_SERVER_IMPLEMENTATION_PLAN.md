@@ -403,8 +403,8 @@ class DNSMonitor {
 
 ## Phase 6: Server Management Scripts (Days 18-19)
 
-### 6.1 Start/Stop Scripts Development
-**Objective**: Create user-friendly scripts to simplify server operations
+### 6.1 Bash Control Script Development
+**Objective**: Create a simple bash script to manage server operations
 
 **Tasks**:
 1. **Main Control Script**
@@ -415,20 +415,7 @@ class DNSMonitor {
      - Virtual environment activation
      - Configuration file validation before start
      - Graceful shutdown with configurable timeout
-
-2. **Windows Batch Script**
-   - Create `scripts/dns-server.bat` (Windows):
-     - Same functionality as Unix script but for Windows
-     - PowerShell integration for better process management
-     - Windows service installation option
-
-3. **Python CLI Interface**
-   - Create `src/dns_server/cli.py`:
-     - Click-based command-line interface
-     - Cross-platform server management
-     - Configuration validation and testing
-     - Health check commands
-     - Log viewing and management
+     - Log viewing functionality
 
 **Implementation Details**:
 ```bash
@@ -455,73 +442,132 @@ stop_server() {
     # Wait for process to terminate
     # Clean up PID file
 }
-```
 
-```python
-# Example CLI structure
-import click
-from dns_server.main import DNSServerApp
+show_status() {
+    # Check if server is running
+    # Display process information
+    # Show listening ports
+    # Display log file location
+}
 
-@click.group()
-def cli():
-    """DNS Server Management CLI"""
-    pass
-
-@cli.command()
-@click.option('--config', '-c', default='config/default.yaml')
-@click.option('--daemon', '-d', is_flag=True, help='Run in daemon mode')
-def start(config, daemon):
-    """Start the DNS server"""
-    # Implementation here
-
-@cli.command()
-def stop():
-    """Stop the DNS server"""
-    # Implementation here
-
-@cli.command()
-def status():
-    """Show server status"""
-    # Implementation here
+show_logs() {
+    # Display recent log entries
+    # Support following logs in real-time
+}
 ```
 
 **Validation Criteria**:
-- ✅ Scripts work on all target platforms (Linux, macOS, Windows)
+- ✅ Script works on Linux, macOS, and other Unix systems
 - ✅ Proper process management with PID tracking
 - ✅ Graceful shutdown functionality
 - ✅ Configuration validation before startup
 - ✅ Clear error messages and user feedback
+- ✅ Status command shows comprehensive server information
 
-### 6.2 System Integration and Service Management
-**Objective**: Provide system-level integration options
+### 6.2 Docker Compose Configuration
+**Objective**: Provide containerized deployment for simplified management
 
 **Tasks**:
-1. **Systemd Service File**
-   - Create `scripts/dns-server.service`:
-     - Proper systemd unit file for Linux systems
-     - Automatic restart on failure
-     - Dependency management
-     - User/group configuration
-     - Environment setup
+1. **Docker Compose File**
+   - Create `docker-compose.yml`:
+     - DNS server service with proper networking
+     - Volume mounts for configuration and logs
+     - Health checks for service monitoring
+     - Environment variable configuration
+     - Resource limits and security settings
+     - Port mapping for DNS and web interface
 
-2. **Process Management Integration**
-   - Create supervisor configuration: `scripts/dns-server.conf`
-   - Create PM2 configuration: `scripts/ecosystem.config.js`
-   - Docker Compose file: `docker-compose.yml`
+2. **Docker Integration**
+   - Ensure Dockerfile exists and is optimized
+   - Configure proper container networking for DNS
+   - Set up volume persistence for logs and cache
+   - Implement health check endpoint integration
 
-3. **Installation Helpers**
-   - Create `scripts/install.sh`:
-     - Automated installation script
-     - Dependency checking and installation
-     - Virtual environment setup
-     - Service registration (optional)
-   - Create `scripts/uninstall.sh` for clean removal
+**Implementation Details**:
+```yaml
+# Example docker-compose.yml structure
+version: '3.8'
+
+services:
+  dns-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dns-server
+    restart: unless-stopped
+    ports:
+      - "5353:5353/udp"    # DNS port (UDP)
+      - "5353:5353/tcp"    # DNS port (TCP)
+      - "8080:8080/tcp"    # Web interface port
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - dns-server-cache:/app/cache
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "/app/src/dns_server/main.py", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - dns-network
+
+networks:
+  dns-network:
+    driver: bridge
+
+volumes:
+  dns-server-cache:
+```
 
 **Validation Criteria**:
-- ✅ systemd service works correctly
-- ✅ Process managers can manage the server
-- ✅ Installation script works on clean systems
-- ✅ All system integration methods functional
+- ✅ Docker Compose deploys successfully
+- ✅ DNS server accessible on configured ports
+- ✅ Web interface functional through Docker
+- ✅ Logs and configuration properly mounted
+- ✅ Health checks work correctly
+- ✅ Container restarts automatically on failure
+- ✅ Resource limits enforced
+
+### 6.3 Management Documentation
+**Objective**: Provide clear usage instructions
+
+**Tasks**:
+1. **Script Usage Documentation**
+   - Document all bash script commands
+   - Provide troubleshooting guide
+   - Include common use cases and examples
+
+2. **Docker Usage Documentation**
+   - Docker Compose deployment instructions
+   - Container management commands
+   - Volume and network configuration guide
+   - Scaling and monitoring guidance
+
+**Examples**:
+```bash
+# Bash script usage
+./scripts/dns-server.sh start         # Start the server
+./scripts/dns-server.sh stop          # Stop the server
+./scripts/dns-server.sh restart       # Restart the server
+./scripts/dns-server.sh status        # Show status
+./scripts/dns-server.sh logs          # Show recent logs
+./scripts/dns-server.sh logs follow   # Follow logs in real-time
+
+# Docker Compose usage
+docker-compose up -d                  # Start in background
+docker-compose down                   # Stop and remove containers
+docker-compose logs -f dns-server     # Follow logs
+docker-compose restart dns-server     # Restart DNS server
+docker-compose exec dns-server bash   # Shell into container
+```
+
+**Validation Criteria**:
+- ✅ Documentation covers all functionality
+- ✅ Examples work as documented
+- ✅ Troubleshooting guide addresses common issues
+- ✅ Both deployment methods clearly explained
 
 ## Phase 7: Final Integration and Validation (Days 20-22)
 

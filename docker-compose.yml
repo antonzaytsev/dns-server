@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  dns-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dns-server
+    restart: unless-stopped
+
+    # Port mappings
+    ports:
+      - "5353:5353/udp"    # DNS port (UDP)
+      - "5353:5353/tcp"    # DNS port (TCP)
+      - "8080:8080/tcp"    # Web interface port
+
+    # Volume mounts
+    volumes:
+      - ./config:/app/config:ro           # Configuration (read-only)
+      - ./logs:/app/logs                  # Logs directory
+      - dns-server-cache:/app/cache       # Persistent cache
+
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app/src
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "/app/src/dns_server/main.py", "--config", "/app/config/default.yaml", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Network configuration
+    networks:
+      - dns-network
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE    # Required to bind to ports
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+# Network configuration
+networks:
+  dns-network:
+    driver: bridge
+    name: dns-network
+
+# Volume configuration
+volumes:
+  dns-server-cache:
+    name: dns-server-cache
