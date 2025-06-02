@@ -1,10 +1,13 @@
 # DNS Server Docker Compose Configuration
 #
-# For Linux/Debian systems, run with user mapping to avoid permission issues:
-#   UID=$(id -u) GID=$(id -g) docker-compose up -d --build
+# Uses port 9953 for DNS (non-privileged) and port 9980 for web interface
+# No special privileges required
 #
-# For macOS/other systems, default UID/GID (1000:1000) usually works:
+# To run:
 #   docker-compose up -d --build
+#
+# To stop:
+#   docker-compose down
 
 services:
   dns-server:
@@ -14,22 +17,27 @@ services:
     container_name: dns-server
     restart: unless-stopped
 
-    # Run as host user to avoid permission issues with volume mounts
-    # Set with: UID=$(id -u) GID=$(id -g) docker-compose up -d --build
+    # Run as regular user for non-privileged ports
     user: "${UID:-1000}:${GID:-1000}"
 
-    # Use host networking to preserve client IPs
-    network_mode: host
+    # Use bridge networking with explicit port mapping
+    ports:
+      - "9953:53/udp"     # DNS UDP (maps host 9953 to container 53)
+      - "9953:53/tcp"     # DNS TCP (maps host 9953 to container 53)
+      - "9980:80/tcp"     # Web interface (maps host 9980 to container 80)
 
     # Volume mounts
     volumes:
       - ./:/app
 
+
     # Environment variables
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app/src
-      - DNS_SERVER_SERVER_BIND_ADDRESS=0.0.0.0  # Bind to all interfaces with host networking
+      - DNS_SERVER_SERVER_BIND_ADDRESS=0.0.0.0
+      - DNS_SERVER_SERVER_DNS_PORT=53      # Container internal port
+      - DNS_SERVER_SERVER_WEB_PORT=80      # Container internal port
 
     # Health check
     healthcheck:
@@ -43,11 +51,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
-          cpus: '1.0'
+          memory: 1G        # Increased for better performance
+          cpus: '1.5'       # Increased for better performance
         reservations:
-          memory: 256M
-          cpus: '0.5'
+          memory: 512M      # Increased reservation
+          cpus: '0.75'
 
     # Security settings
     security_opt:
@@ -55,11 +63,12 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      - NET_BIND_SERVICE    # Required to bind to ports
+      - NET_BIND_SERVICE    # Not needed for non-privileged ports, but keeping for flexibility
 
     # Logging configuration
     logging:
       driver: "json-file"
       options:
-        max-size: "50m"
-        max-file: "5"
+        max-size: "100m"    # Larger log files
+        max-file: "10"      # More log files
+        labels: "service=dns-server"

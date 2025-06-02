@@ -34,12 +34,12 @@ RUN mkdir -p logs cache && \
     chmod -R 777 logs cache && \
     chmod -R 755 /app
 
-# Expose ports
-EXPOSE 9953/udp 9953/tcp 9980/tcp
+# Expose standard ports
+EXPOSE 53/udp 53/tcp 80/tcp
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:9980/api/status || exit 1
+    CMD curl -f http://localhost/api/status || exit 1
 
 # Default command
 CMD ["python", "src/dns_server/main.py", "--config", "config/default.yaml"]
