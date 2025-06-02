@@ -33,7 +33,7 @@ cache:
 logging:
   level: "INFO"                    # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
   format: "json"                   # Log format (json, text)
-  file: "logs/app.log"             # Main application log file path
+  file: ""                         # Disable main application file logging to avoid permission issues
   max_size_mb: 50                  # Maximum log file size before rotation
   backup_count: 5                  # Number of backup log files to keep
 
