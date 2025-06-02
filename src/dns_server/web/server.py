@@ -3,7 +3,6 @@ DNS Server Web Interface
 
 This module provides the web interface server using aiohttp for:
 - REST API endpoints for monitoring and control
-- WebSocket real-time updates
 - Static file serving for the dashboard
 """
 
@@ -12,13 +11,12 @@ import weakref
 from pathlib import Path
 from typing import Optional
 
-from aiohttp import web, web_ws
+from aiohttp import web
 from aiohttp.web import Application
 
 from ..config.schema import WebConfig
 from ..dns_logging import get_logger, log_exception
 from .api import setup_api_routes
-from .websocket import WebSocketManager
 
 
 class WebServer:
@@ -40,7 +38,6 @@ class WebServer:
         self.app: Optional[Application] = None
         self.runner: Optional[web.AppRunner] = None
         self.site: Optional[web.TCPSite] = None
-        self.websocket_manager: Optional[WebSocketManager] = None
 
         self._shutdown_event = asyncio.Event()
 
@@ -48,14 +45,8 @@ class WebServer:
         """Setup aiohttp application with routes and middleware."""
         app = web.Application()
 
-        # Setup WebSocket manager
-        self.websocket_manager = WebSocketManager(self.dns_server_app)
-
-        # Setup API routes
-        setup_api_routes(app, self.dns_server_app, self.websocket_manager)
-
-        # Setup WebSocket route
-        app.router.add_get("/ws", self._websocket_handler)
+        # Setup API routes (without WebSocket manager)
+        setup_api_routes(app, self.dns_server_app)
 
         # Setup static file serving for frontend
         self._setup_static_routes(app)
@@ -241,38 +232,6 @@ class WebServer:
 
         return error_middleware
 
-    async def _websocket_handler(self, request):
-        """Handle WebSocket connections."""
-        ws = web_ws.WebSocketResponse()
-        await ws.prepare(request)
-
-        # Register client with WebSocket manager
-        client_id = await self.websocket_manager.add_client(ws)
-
-        try:
-            self.logger.info("WebSocket client connected", client_id=client_id)
-
-            async for msg in ws:
-                if msg.type == web_ws.WSMsgType.TEXT:
-                    # Handle incoming WebSocket messages if needed
-                    data = msg.json()
-                    await self.websocket_manager.handle_message(client_id, data)
-                elif msg.type == web_ws.WSMsgType.ERROR:
-                    self.logger.error(
-                        "WebSocket error", client_id=client_id, error=ws.exception()
-                    )
-                    break
-
-        except Exception as ex:
-            self.logger.error(
-                "WebSocket connection error", client_id=client_id, error=str(ex)
-            )
-        finally:
-            await self.websocket_manager.remove_client(client_id)
-            self.logger.info("WebSocket client disconnected", client_id=client_id)
-
-        return ws
-
     async def start(self) -> None:
         """Start the web server."""
         if self.runner:
@@ -296,10 +255,6 @@ class WebServer:
 
             await self.site.start()
 
-            # Start WebSocket manager
-            if self.websocket_manager:
-                await self.websocket_manager.start()
-
             self.logger.info(
                 "Web server started",
                 host=getattr(self.config, "bind_address", "127.0.0.1"),
@@ -314,10 +269,6 @@ class WebServer:
     async def stop(self) -> None:
         """Stop the web server."""
         self.logger.info("Stopping web server")
-
-        # Stop WebSocket manager
-        if self.websocket_manager:
-            await self.websocket_manager.stop()
 
         # Stop site
         if self.site:
@@ -337,10 +288,6 @@ class WebServer:
         """Get web server health status."""
         status = {
             "status": "healthy" if self.runner else "stopped",
-            "websocket_clients": 0,
         }
-
-        if self.websocket_manager:
-            status["websocket_clients"] = self.websocket_manager.get_client_count()
 
         return status
