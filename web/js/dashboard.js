@@ -453,7 +453,7 @@ class DNSDashboard {
         let filteredQueries = this.queries;
         if (this.searchFilter) {
             filteredQueries = this.queries.filter(query => {
-                const searchText = `${query.domain} ${query.client_ip} ${query.query_type} ${query.response_code}`.toLowerCase();
+                const searchText = `${query.domain} ${query.client_ip} ${query.query_type} ${query.response_code} ${query.error || ''}`.toLowerCase();
                 return searchText.includes(this.searchFilter);
             });
         }
@@ -485,8 +485,26 @@ class DNSDashboard {
         // Format timestamp
         const timestamp = query.timestamp ? new Date(query.timestamp).toLocaleTimeString() : '-';
 
-        // Format response code
+        // Format response code and error message
         const responseClass = ['NOERROR', 'SUCCESS'].includes(query.response_code) ? 'success' : 'error';
+        let responseContent = `<span class="response-code ${responseClass}">${query.response_code || '-'}</span>`;
+        
+        // Add error message if present, or response code explanation for failed queries
+        if (query.error) {
+            responseContent += `<div class="error-message" title="${query.error}">${query.error}</div>`;
+        } else if (query.response_code && !['NOERROR', 'SUCCESS'].includes(query.response_code)) {
+            // Show response code explanation for failed queries
+            const explanations = {
+                'NXDOMAIN': 'Domain does not exist',
+                'SERVFAIL': 'Server failure',
+                'REFUSED': 'Query refused',
+                'FORMERR': 'Format error',
+                'NOTIMP': 'Not implemented',
+                'NXRRSET': 'RRset does not exist'
+            };
+            const explanation = explanations[query.response_code] || `DNS query failed: ${query.response_code}`;
+            responseContent += `<div class="error-message" title="${explanation}">${explanation}</div>`;
+        }
 
         // Extract IP addresses from response_data
         let ipAddresses = '-';
@@ -528,7 +546,7 @@ class DNSDashboard {
             <div class="query-col domain-col" title="${query.domain || '-'}">${query.domain || '-'}</div>
             <div class="query-col type-col">${query.query_type || '-'}</div>
             <div class="query-col response-col">
-                <span class="response-code ${responseClass}">${query.response_code || '-'}</span>
+                ${responseContent}
             </div>
             <div class="query-col ip-addresses-col" title="${ipAddresses}">${ipAddresses}</div>
             <div class="query-col time-col">${query.response_time_ms || '-'}</div>

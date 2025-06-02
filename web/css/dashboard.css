@@ -402,6 +402,18 @@ body {
     color: white;
 }
 
+.error-message {
+    font-size: 0.75rem;
+    color: var(--danger);
+    margin-top: 0.25rem;
+    line-height: 1.2;
+    font-style: italic;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Controls Section */
 .controls-section {
     margin-bottom: var(--gap);
