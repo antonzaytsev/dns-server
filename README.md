@@ -26,7 +26,7 @@ A high-performance, async DNS server written in Python with real-time monitoring
 
 2. **Start the DNS server**:
    ```bash
-   docker-compose up -d
+   docker-compose up -d --build
    ```
 
 3. **Access the web dashboard**:
@@ -42,25 +42,9 @@ A high-performance, async DNS server written in Python with real-time monitoring
 
 #### Issue: All Client IPs Show the Same Address
 
-If you notice that all DNS queries in the dashboard show the same client IP (e.g., `192.168.147.1`), this is typically due to Docker networking configuration. The DNS server is receiving all requests through Docker's bridge network, masking the real client IPs.
+If you notice that all DNS queries in the dashboard show the same client IP (e.g., `172.17.0.1`), this is typically due to Docker networking configuration. The DNS server is receiving all requests through Docker's bridge network, masking the real client IPs.
 
-#### Solution 1: Use Host Networking (Recommended)
-
-The docker-compose.yml has been configured to use host networking mode, which allows the DNS server to see real client IPs:
-
-```yaml
-services:
-  dns-server:
-    network_mode: host
-    # ... other configuration
-```
-
-With host networking:
-- ✅ Real client IPs are preserved
-- ✅ Better performance (no NAT overhead)
-- ⚠️ Container uses host's network stack directly
-
-#### Solution 2: Enable Debug Logging
+#### Solution 1: Enable Debug Logging
 
 To troubleshoot client IP issues, enable detailed debugging in `config/default.yaml`:
 
@@ -74,29 +58,22 @@ This will log detailed information about each connection including:
 - Transport information
 - Connection metadata
 
-#### Solution 3: Alternative Docker Networking
+#### Solution 2: Use Host Networking (Alternative)
 
-If you cannot use host networking, you can try these alternatives:
+If you need to see real client IPs, you can modify `docker-compose.yml` to use host networking:
 
-1. **Bridge with published ports** (less ideal):
-   ```yaml
-   services:
-     dns-server:
-       ports:
-         - "9953:9953/udp"
-         - "9953:9953/tcp"
-         - "9980:9980/tcp"
-       # Note: This may still show Docker gateway IP
-   ```
+```yaml
+services:
+  dns-server:
+    network_mode: host
+    # Remove the ports section when using host networking
+```
 
-2. **Custom bridge network with IP forwarding**:
-   ```yaml
-   networks:
-     dns-network:
-       driver: bridge
-       driver_opts:
-         com.docker.network.bridge.enable_ip_masquerade: "false"
-   ```
+With host networking:
+- ✅ Real client IPs are preserved
+- ✅ Better performance (no NAT overhead)
+- ⚠️ Container uses host's network stack directly
+- ⚠️ May require additional system configuration
 
 #### Verifying Client IP Detection
 
@@ -122,8 +99,8 @@ Edit `config/default.yaml` to customize the DNS server:
 # Server Configuration
 server:
   bind_address: "0.0.0.0"  # Bind to all interfaces
-  dns_port: 9953           # DNS server port
-  web_port: 9980           # Web dashboard port
+  dns_port: 53             # Container internal DNS port (exposed as 9953)
+  web_port: 80             # Container internal web port (exposed as 9980)
 
 # Upstream DNS Servers
 upstream_servers:
@@ -247,7 +224,13 @@ The web dashboard provides real-time monitoring:
 
 ### Structured Logging
 
-All logs are output in JSON format for easy parsing:
+DNS queries are logged in JSON format to `logs/dns-server.log`:
+
+```json
+{"datetime": "2025-06-01 22:12:13 UTC", "domain": "google.com", "ip_address": ["77.88.55.242"]}
+```
+
+Application logs are written to `logs/app.log` in structured JSON format:
 
 ```json
 {
@@ -270,23 +253,36 @@ Check server health:
 python -m src.dns_server.main --health-check
 ```
 
+Or via Docker:
+```bash
+docker-compose exec dns-server python /app/src/dns_server/main.py --config /app/config/default.yaml --health-check
+```
+
 ## Troubleshooting
 
 ### Common Issues
 
 1. **Permission denied on port 53**:
-   - Use non-privileged ports (like 9953) for development
-   - Run with sudo for privileged ports in production
+   - The DNS server uses port 9953 (non-privileged) by default
+   - No special permissions required for the default configuration
+   - For port 53, see advanced configuration below
 
-2. **Client IPs not showing correctly**:
-   - Use host networking mode in Docker
+2. **Port already in use**:
+   - Check if another service is using port 9953: `lsof -i :9953`
+   - Check if another service is using port 9980: `lsof -i :9980`
+   - Stop conflicting services or change ports in configuration
+
+3. **Client IPs not showing correctly**:
+   - This is normal with Docker bridge networking
    - Enable debug_client_ip for troubleshooting
+   - Consider using host networking if real IPs are needed
 
-3. **High memory usage**:
+4. **High memory usage**:
    - Adjust cache size in configuration
    - Monitor cache hit ratios
+   - Check for memory leaks in logs
 
-4. **Slow query responses**:
+5. **Slow query responses**:
    - Check upstream server latency
    - Review cache configuration
    - Monitor resource usage
@@ -299,6 +295,54 @@ Enable debug logging for detailed troubleshooting:
 logging:
   level: "DEBUG"
 ```
+
+### Docker Issues
+
+1. **Container fails to start**:
+   ```bash
+   # Check container logs
+   docker-compose logs dns-server
+   
+   # Check container status
+   docker-compose ps
+   ```
+
+2. **Permission issues with log files**:
+   ```bash
+   # Create log directories with proper permissions
+   mkdir -p logs
+   chmod 755 logs
+   ```
+
+3. **Network connectivity issues**:
+   ```bash
+   # Test container networking
+   docker-compose exec dns-server ping 8.8.8.8
+   
+   # Check port binding
+   docker-compose port dns-server 53
+   ```
+
+### Advanced Configuration: Using Standard Port 53
+
+If you need to run on the standard DNS port 53, you can modify the configuration:
+
+1. **Update docker-compose.yml**:
+   ```yaml
+   services:
+     dns-server:
+       # Comment out the user line to run as root
+       # user: "${UID:-1000}:${GID:-1000}"
+       ports:
+         - "53:53/udp"     # DNS UDP
+         - "53:53/tcp"     # DNS TCP
+         - "9980:80/tcp"   # Web interface
+   ```
+
+2. **Run with elevated privileges**:
+   ```bash
+   sudo docker-compose up -d --build
+   ```
 
 ## License
 
