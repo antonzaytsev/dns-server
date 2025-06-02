@@ -163,7 +163,7 @@ class LoggingConfig:
 
     level: str = "INFO"
     format: str = "structured"
-    file: str = "logs/dns_server.log"
+    file: str = "logs/dns-server.log"
     max_size_mb: int = 100
     backup_count: int = 5
     enable_request_logging: bool = True

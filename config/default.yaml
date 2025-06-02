@@ -36,7 +36,7 @@ security:
 logging:
   level: "INFO"                       # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
   format: "structured"                # Log format: simple, detailed, structured
-  file: "logs/dns_server.log"         # Log file path
+  file: "logs/dns-server.log"         # Log file path (updated to use hyphenated naming)
   max_size_mb: 100                    # Maximum log file size in MB
   backup_count: 5                     # Number of backup log files
   enable_request_logging: true        # Log all requests
