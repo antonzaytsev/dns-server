@@ -23,7 +23,6 @@ except ImportError:
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dns_server.cache import BasicDNSCache
 from dns_server.config.loader import ConfigLoader
 from dns_server.core import DNSServer
 from dns_server.core.performance import (
@@ -49,7 +48,6 @@ class DNSServerApp:
         self.config = None
         self.dns_server = None
         self.web_server = None
-        self.cache = None
         self._shutdown_event = asyncio.Event()
         self.logger = None
 
@@ -71,18 +69,8 @@ class DNSServerApp:
             # Configure connection pool and concurrency limiter based on config
             self._configure_performance_settings()
 
-            # Create cache
-            cache_config = getattr(self.config, "cache", None)
-            cache_size = (
-                getattr(cache_config, "max_size_mb", 100) * 1000
-                if cache_config
-                else 1000
-            )
-            self.cache = BasicDNSCache(max_size=cache_size)
-
             # Create DNS server
             self.dns_server = DNSServer(self.config)
-            self.dns_server.set_cache(self.cache)
 
             # Set performance monitoring on DNS server
             self.dns_server.set_performance_monitor(performance_monitor)
@@ -106,9 +94,6 @@ class DNSServerApp:
 
             self.logger.info(
                 "DNS server application initialized",
-                cache_size_mb=(
-                    getattr(cache_config, "max_size_mb", 100) if cache_config else 100
-                ),
                 dns_port=self.config.server.dns_port,
                 web_port=self.config.server.web_port,
                 web_enabled=web_config and getattr(web_config, "enabled", True),

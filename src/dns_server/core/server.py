@@ -140,7 +140,6 @@ class DNSServer:
         self.config = config
         self.resolver = DNSResolver(config)
         self.iterative_resolver = IterativeResolver(self.resolver)
-        self.cache = None  # Will be set externally
         self.performance_monitor = None  # Will be set externally
 
         # Get DNS request tracker
@@ -157,8 +156,6 @@ class DNSServer:
             "total_queries": 0,
             "udp_queries": 0,
             "tcp_queries": 0,
-            "cache_hits": 0,
-            "cache_misses": 0,
             "errors": 0,
             "start_time": 0,
             "response_times": [],
@@ -166,11 +163,6 @@ class DNSServer:
 
         # Rate limiting (per IP)
         self._rate_limits = {}
-
-    def set_cache(self, cache):
-        """Set the cache instance"""
-        self.cache = cache
-        self.resolver.set_cache(cache)
 
     def set_performance_monitor(self, monitor: PerformanceMonitor):
         """Set the performance monitor"""
@@ -409,37 +401,19 @@ class DNSServer:
             recursion_available = True  # We support recursion
 
             # Resolve the query
-            cache_hit = False
             upstream_server = None
             response_data = []
 
             try:
                 if recursion_desired and recursion_available:
-                    # Check cache first
-                    if self.cache:
-                        cached = await self.cache.get(question)
-                        if cached:
-                            cache_hit = True
-                            self._stats["cache_hits"] += 1
-                            resolved_response = cached
-                        else:
-                            self._stats["cache_misses"] += 1
-                            # Use recursive resolver
-                            resolved_response = await self.resolver.resolve(
-                                question, use_recursion=True
-                            )
-                            # Get upstream server info if available
-                            upstream_server = getattr(
-                                resolved_response, "upstream_server", None
-                            )
-                    else:
-                        # Use recursive resolver without cache
-                        resolved_response = await self.resolver.resolve(
-                            question, use_recursion=True
-                        )
-                        upstream_server = getattr(
-                            resolved_response, "upstream_server", None
-                        )
+                    # Use recursive resolver
+                    resolved_response = await self.resolver.resolve(
+                        question, use_recursion=True
+                    )
+                    # Get upstream server info if available
+                    upstream_server = getattr(
+                        resolved_response, "upstream_server", None
+                    )
                 else:
                     # Use iterative resolver
                     resolved_response = await self.iterative_resolver.resolve(question)
@@ -493,7 +467,7 @@ class DNSServer:
                 query_type=query_type,
                 domain=domain,
                 response_code=response_code,
-                cache_hit=cache_hit,
+                cache_hit=False,
                 upstream_server=upstream_server,
                 response_data=response_data,
             )
@@ -636,8 +610,6 @@ class DNSServer:
             "total_queries": self._stats["total_queries"],
             "udp_queries": self._stats["udp_queries"],
             "tcp_queries": self._stats["tcp_queries"],
-            "cache_hits": self._stats["cache_hits"],
-            "cache_misses": self._stats["cache_misses"],
             "errors": self._stats["errors"],
             "is_running": self._is_running,
         }
@@ -654,15 +626,6 @@ class DNSServer:
                     "max_response_time_ms": round(max(response_times), 2),
                 }
             )
-
-        # Calculate cache hit ratio
-        total_cache_requests = stats["cache_hits"] + stats["cache_misses"]
-        if total_cache_requests > 0:
-            stats["cache_hit_ratio"] = round(
-                stats["cache_hits"] / total_cache_requests, 3
-            )
-        else:
-            stats["cache_hit_ratio"] = 0.0
 
         # Calculate queries per second
         if uptime > 0:
@@ -691,11 +654,6 @@ class DNSServer:
         if hasattr(self.resolver, "health_check"):
             resolver_health = await self.resolver.health_check()
             health["resolver"] = resolver_health
-
-        # Check cache health
-        if self.cache and hasattr(self.cache, "health_check"):
-            cache_health = await self.cache.health_check()
-            health["cache"] = cache_health
 
         return health
 

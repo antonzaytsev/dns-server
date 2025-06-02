@@ -94,7 +94,6 @@ class DNSResolver:
     def __init__(self, config):
         self.config = config
         self.upstream_servers = self._load_upstream_servers(config.upstream_servers)
-        self.cache = None  # Will be set by the server
         self.performance_monitor = None  # Will be set by the server
         self._transaction_counter = 0
 
@@ -121,10 +120,6 @@ class DNSResolver:
 
         return servers
 
-    def set_cache(self, cache):
-        """Set the cache instance"""
-        self.cache = cache
-
     def set_performance_monitor(self, monitor: PerformanceMonitor):
         """Set the performance monitor"""
         self.performance_monitor = monitor
@@ -143,17 +138,6 @@ class DNSResolver:
         context = QueryContext(original_question=question)
 
         try:
-            # Check cache first if available
-            if self.cache:
-                cached_response = await self.cache.get(question)
-                if cached_response:
-                    logger.debug(f"Cache hit for {question.name} {question.qtype}")
-                    if self.performance_monitor:
-                        self.performance_monitor.record_operation_time(
-                            "cache_lookup", 0.001
-                        )
-                    return cached_response
-
             # Determine resolution strategy
             if use_recursion and self.upstream_servers:
                 # Forward to upstream servers
@@ -161,14 +145,6 @@ class DNSResolver:
             else:
                 # Perform recursive resolution ourselves
                 response = await self._recursive_resolve(question, context)
-
-            # Cache the response if we have a cache
-            if (
-                self.cache
-                and response
-                and response.header.rcode == DNSResponseCode.NOERROR
-            ):
-                await self.cache.put(question, response)
 
             return response
 
@@ -640,12 +616,6 @@ class IterativeResolver:
         """
         Perform iterative resolution - return referrals instead of recursing
         """
-        # Check cache first
-        if self.resolver.cache:
-            cached_response = await self.resolver.cache.get(question)
-            if cached_response:
-                return cached_response
-
         # For iterative queries, we typically just check our cache and local data
         # If we don't have the answer, we return a referral to root servers
 
