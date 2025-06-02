@@ -76,12 +76,12 @@ class DNSFileLogger:
         # Create log entry in exact format specified
         log_entry = {
             "datetime": formatted_datetime,
-            "domain": domain.rstrip("."),  # Remove trailing dot if present
-            "ip_address": ip_addresses,
+            "domain": domain.rstrip('.'),  # Remove trailing dot if present
+            "ip_address": ip_addresses
         }
 
         # Write as single JSON line
-        json_line = json.dumps(log_entry, separators=(",", ":"))
+        json_line = json.dumps(log_entry, separators=(',', ':'))
         self.file_logger.info(json_line)
 
 

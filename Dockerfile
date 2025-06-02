@@ -28,17 +28,10 @@ COPY web/ web/
 # Install gosu for potential privilege dropping (keep for future use)
 RUN apt-get update && apt-get install -y gosu && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
-RUN groupadd -r dnsserver && useradd -r -g dnsserver dnsserver
-
-# Create directories for logs and cache with proper permissions
+# Create directories with permissions that work for any user
 RUN mkdir -p logs cache && \
-    chown -R dnsserver:dnsserver /app && \
-    chmod -R 755 /app && \
-    chmod -R 777 logs cache
-
-# Switch to non-root user
-USER dnsserver
+    chmod -R 777 logs cache && \
+    chmod -R 755 /app
 
 # Expose ports
 EXPOSE 9953/udp 9953/tcp 9980/tcp

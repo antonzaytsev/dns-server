@@ -1,3 +1,11 @@
+# DNS Server Docker Compose Configuration
+#
+# For Linux/Debian systems, run with user mapping to avoid permission issues:
+#   UID=$(id -u) GID=$(id -g) docker-compose up -d --build
+#
+# For macOS/other systems, default UID/GID (1000:1000) usually works:
+#   docker-compose up -d --build
+
 services:
   dns-server:
     build:
@@ -5,6 +13,10 @@ services:
       dockerfile: Dockerfile
     container_name: dns-server
     restart: unless-stopped
+
+    # Run as host user to avoid permission issues with volume mounts
+    # Set with: UID=$(id -u) GID=$(id -g) docker-compose up -d --build
+    user: "${UID:-1000}:${GID:-1000}"
 
     # Use host networking to preserve client IPs
     network_mode: host
@@ -51,8 +63,3 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
-
-# Volume configuration
-volumes:
-  dns-server-cache:
-    name: dns-server-cache
