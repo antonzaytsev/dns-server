@@ -1,11 +1,14 @@
 # DNS Server Default Configuration
 # This file contains sensible defaults for all configuration parameters
+#
+# Note: The container runs on ports 53 (DNS) and 80 (web) internally,
+# but they are mapped to external ports 9953 and 9980 respectively
 
 # Server Configuration
 server:
-  bind_address: "0.0.0.0"  # Bind to all interfaces for host networking
-  dns_port: 9953  # Non-privileged port for development
-  web_port: 9980
+  bind_address: "0.0.0.0"  # Bind to all interfaces
+  dns_port: 53             # Container internal DNS port (exposed as 9953)
+  web_port: 80             # Container internal web port (exposed as 9980)
   workers: 4
 
   # Performance Optimization Settings
