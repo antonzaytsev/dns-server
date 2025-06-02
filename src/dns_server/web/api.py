@@ -173,9 +173,9 @@ class APIHandler:
 
                 # Get performance history if requested
                 if request.query.get("include_history", "false").lower() == "true":
-                    cache_stats[
-                        "performance_history"
-                    ] = await dns_app.cache.stats_manager.get_performance_history()
+                    cache_stats["performance_history"] = (
+                        await dns_app.cache.stats_manager.get_performance_history()
+                    )
 
             return web.json_response(
                 {"cache": cache_stats, "timestamp": datetime.utcnow().isoformat() + "Z"}

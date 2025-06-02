@@ -137,12 +137,12 @@ class WebServer:
 
             # Add CORS headers
             response.headers["Access-Control-Allow-Origin"] = "*"
-            response.headers[
-                "Access-Control-Allow-Methods"
-            ] = "GET, POST, PUT, DELETE, OPTIONS"
-            response.headers[
-                "Access-Control-Allow-Headers"
-            ] = "Content-Type, Authorization"
+            response.headers["Access-Control-Allow-Methods"] = (
+                "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            response.headers["Access-Control-Allow-Headers"] = (
+                "Content-Type, Authorization"
+            )
 
             return response
 
@@ -152,12 +152,12 @@ class WebServer:
         async def options_handler(request):
             response = web.Response()
             response.headers["Access-Control-Allow-Origin"] = "*"
-            response.headers[
-                "Access-Control-Allow-Methods"
-            ] = "GET, POST, PUT, DELETE, OPTIONS"
-            response.headers[
-                "Access-Control-Allow-Headers"
-            ] = "Content-Type, Authorization"
+            response.headers["Access-Control-Allow-Methods"] = (
+                "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            response.headers["Access-Control-Allow-Headers"] = (
+                "Content-Type, Authorization"
+            )
             return response
 
         app.router.add_route("OPTIONS", "/{path:.*}", options_handler)

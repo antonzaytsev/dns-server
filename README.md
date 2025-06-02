@@ -178,6 +178,63 @@ Run performance tests:
 python test_performance.py
 ```
 
+### Code Quality
+
+Run code quality checks and formatters manually when needed:
+
+#### All Quality Checks (Recommended)
+Run all linters and formatters in one command:
+```bash
+docker-compose exec dns-server bash -c "cd /app && black src/ && isort src/ && flake8 src/"
+```
+
+#### Individual Tools
+
+**Code Formatting with Black:**
+```bash
+# Format code
+docker-compose exec dns-server black src/
+
+# Check formatting without changing files
+docker-compose exec dns-server black --check src/
+```
+
+**Import Sorting with isort:**
+```bash
+# Sort imports
+docker-compose exec dns-server isort src/
+
+# Check import sorting without changing files
+docker-compose exec dns-server isort --check-only src/
+```
+
+**Linting with flake8:**
+```bash
+# Run linting
+docker-compose exec dns-server flake8 src/
+```
+
+**Other Quality Checks:**
+```bash
+# Check for trailing whitespace
+docker-compose exec dns-server bash -c "cd /app && find src/ -name '*.py' -exec grep -l '[[:space:]]$' {} \;"
+
+# Check YAML files
+docker-compose exec dns-server python -c "import yaml; yaml.safe_load(open('config/default.yaml'))"
+```
+
+#### Before Committing
+It's recommended to run these commands before committing code:
+```bash
+# Format and lint everything
+docker-compose exec dns-server bash -c "cd /app && black src/ && isort src/ && flake8 src/ && echo 'All checks passed!'"
+```
+
+#### IDE Integration
+For a better development experience, configure your IDE to run these tools automatically:
+- **VS Code**: Install Python, Black, isort, and flake8 extensions
+- **PyCharm**: Enable Black and flake8 in settings
+
 ## Monitoring and Logging
 
 ### Web Dashboard
