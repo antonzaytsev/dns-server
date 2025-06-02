@@ -20,7 +20,7 @@ try:
 except ImportError:
     WATCHDOG_AVAILABLE = False
 
-from .schema import DNSConfig, create_default_config
+from .schema import DNSServerConfig, create_default_config
 
 
 class ConfigLoader:
@@ -30,7 +30,7 @@ class ConfigLoader:
         self,
         config_file: Optional[str] = None,
         enable_hot_reload: bool = True,
-        reload_callback: Optional[Callable[[DNSConfig], None]] = None,
+        reload_callback: Optional[Callable[[DNSServerConfig], None]] = None,
     ):
         """Initialize configuration loader.
 
@@ -42,11 +42,11 @@ class ConfigLoader:
         self.config_file = config_file
         self.enable_hot_reload = enable_hot_reload and WATCHDOG_AVAILABLE
         self.reload_callback = reload_callback
-        self._config: Optional[DNSConfig] = None
+        self._config: Optional[DNSServerConfig] = None
         self._observer: Optional[Observer] = None
         self._last_reload_time = 0.0
 
-    def load_config(self) -> DNSConfig:
+    def load_config(self) -> DNSServerConfig:
         """Load configuration from file and environment variables.
 
         Returns:
@@ -98,7 +98,7 @@ class ConfigLoader:
             self._observer.stop()
             self._observer.join()
 
-    def get_config(self) -> Optional[DNSConfig]:
+    def get_config(self) -> Optional[DNSServerConfig]:
         """Get current configuration."""
         return self._config
 
@@ -148,7 +148,7 @@ class ConfigLoader:
         default_config = create_default_config()
         return self._config_to_dict(default_config)
 
-    def _config_to_dict(self, config: DNSConfig) -> Dict[str, Any]:
+    def _config_to_dict(self, config: DNSServerConfig) -> Dict[str, Any]:
         """Convert configuration object to dictionary."""
         return {
             "server": {
@@ -156,40 +156,63 @@ class ConfigLoader:
                 "dns_port": config.server.dns_port,
                 "web_port": config.server.web_port,
                 "workers": config.server.workers,
-                # Performance Optimization Settings
                 "max_concurrent_requests": config.server.max_concurrent_requests,
                 "request_queue_size": config.server.request_queue_size,
                 "max_upstream_connections": config.server.max_upstream_connections,
                 "connection_timeout": config.server.connection_timeout,
+                "keepalive_timeout": config.server.keepalive_timeout,
+                "max_clients": config.server.max_clients,
             },
             "upstream_servers": config.upstream_servers,
-            "cache": {
-                "max_size_mb": config.cache.max_size_mb,
-                "default_ttl": config.cache.default_ttl,
-                "min_ttl": config.cache.min_ttl,
-                "max_ttl": config.cache.max_ttl,
-                "negative_ttl": config.cache.negative_ttl,
-            },
             "logging": {
                 "level": config.logging.level,
                 "format": config.logging.format,
                 "file": config.logging.file,
                 "max_size_mb": config.logging.max_size_mb,
                 "backup_count": config.logging.backup_count,
+                "enable_request_logging": config.logging.enable_request_logging,
+                "log_query_details": config.logging.log_query_details,
+                "log_performance_metrics": config.logging.log_performance_metrics,
+                "log_security_events": config.logging.log_security_events,
+                "structured_format": config.logging.structured_format,
             },
             "security": {
                 "rate_limit_per_ip": config.security.rate_limit_per_ip,
-                "allowed_networks": config.security.allowed_networks,
-                "blacklist_enabled": config.security.blacklist_enabled,
+                "block_malformed_requests": config.security.block_malformed_requests,
+                "enable_dns_sec": config.security.enable_dns_sec,
+                "enable_query_logging": config.security.enable_query_logging,
+                "allowed_query_types": config.security.allowed_query_types,
+                "blocked_domains": config.security.blocked_domains,
+                "whitelist_ips": config.security.whitelist_ips,
+                "blacklist_ips": config.security.blacklist_ips,
+                "max_query_length": config.security.max_query_length,
+                "enable_response_filtering": config.security.enable_response_filtering,
+                "debug_client_ip": config.security.debug_client_ip,
+            },
+            "monitoring": {
+                "enable_metrics": config.monitoring.enable_metrics,
+                "metrics_port": config.monitoring.metrics_port,
+                "enable_health_check": config.monitoring.enable_health_check,
+                "health_check_interval": config.monitoring.health_check_interval,
+                "performance_tracking": config.monitoring.performance_tracking,
+                "alert_on_high_error_rate": config.monitoring.alert_on_high_error_rate,
+                "error_rate_threshold": config.monitoring.error_rate_threshold,
+                "alert_on_slow_queries": config.monitoring.alert_on_slow_queries,
+                "slow_query_threshold_ms": config.monitoring.slow_query_threshold_ms,
             },
             "web": {
                 "enabled": config.web.enabled,
-                "real_time_updates": config.web.real_time_updates,
-                "history_limit": config.web.history_limit,
+                "debug": config.web.debug,
+                "cors_enabled": config.web.cors_enabled,
+                "cors_origins": config.web.cors_origins,
+                "static_files_path": config.web.static_files_path,
+                "api_rate_limit": config.web.api_rate_limit,
+                "websocket_enabled": config.web.websocket_enabled,
+                "websocket_max_connections": config.web.websocket_max_connections,
             },
         }
 
-    def _dict_to_config(self, config_dict: Dict[str, Any]) -> DNSConfig:
+    def _dict_to_config(self, config_dict: Dict[str, Any]) -> DNSServerConfig:
         """Convert dictionary to configuration object.
 
         Args:
@@ -202,8 +225,8 @@ class ConfigLoader:
             ValueError: If configuration is invalid
         """
         from .schema import (
-            CacheConfig,
             LoggingConfig,
+            MonitoringConfig,
             SecurityConfig,
             ServerConfig,
             WebConfig,
@@ -211,17 +234,17 @@ class ConfigLoader:
 
         # Create configuration objects with validation
         server_config = ServerConfig(**config_dict.get("server", {}))
-        cache_config = CacheConfig(**config_dict.get("cache", {}))
         logging_config = LoggingConfig(**config_dict.get("logging", {}))
         security_config = SecurityConfig(**config_dict.get("security", {}))
+        monitoring_config = MonitoringConfig(**config_dict.get("monitoring", {}))
         web_config = WebConfig(**config_dict.get("web", {}))
 
-        config = DNSConfig(
+        config = DNSServerConfig(
             server=server_config,
             upstream_servers=config_dict.get("upstream_servers", []),
-            cache=cache_config,
             logging=logging_config,
             security=security_config,
+            monitoring=monitoring_config,
             web=web_config,
         )
 
@@ -375,8 +398,8 @@ if WATCHDOG_AVAILABLE:
 def load_config_from_file(
     config_file: Optional[str] = None,
     enable_hot_reload: bool = True,
-    reload_callback: Optional[Callable[[DNSConfig], None]] = None,
-) -> Tuple[DNSConfig, ConfigLoader]:
+    reload_callback: Optional[Callable[[DNSServerConfig], None]] = None,
+) -> Tuple[DNSServerConfig, ConfigLoader]:
     """Convenience function to load configuration.
 
     Args:

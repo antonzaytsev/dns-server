@@ -1,8 +1,6 @@
-# DNS Server Default Configuration
-# This file contains sensible defaults for all configuration parameters
-#
-# Note: The container runs on ports 53 (DNS) and 80 (web) internally,
-# but they are mapped to external ports 9953 and 9980 respectively
+# DNS Server Configuration File
+# This file contains the configuration for the DNS server
+# All settings are optional and will use sensible defaults if not specified
 
 # Server Configuration
 server:
@@ -18,76 +16,54 @@ server:
   connection_timeout: 30.0         # Connection timeout in seconds
 
 # Upstream DNS Servers
-# These servers will be used for forwarding queries when recursive resolution is needed
 upstream_servers:
-  - "8.8.8.8"        # Google DNS Primary
-  - "1.1.1.1"        # Cloudflare DNS Primary
-  - "208.67.222.222" # OpenDNS Primary
-
-# Cache Configuration
-cache:
-  max_size_mb: 100     # Maximum cache size in megabytes
-  default_ttl: 300     # Default TTL in seconds (5 minutes)
-  min_ttl: 1           # Minimum TTL in seconds
-  max_ttl: 86400       # Maximum TTL in seconds (24 hours)
-  negative_ttl: 300    # TTL for negative cache entries (NXDOMAIN, etc.)
-
-# Logging Configuration
-logging:
-  level: "INFO"                    # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-  format: "json"                   # Log format (json, text)
-  file: "logs/app.log"             # Web logs
-  max_size_mb: 50                  # Maximum log file size before rotation
-  backup_count: 5                  # Number of backup log files to keep
+  - "8.8.8.8"           # Google DNS
+  - "8.8.4.4"           # Google DNS
+  - "1.1.1.1"           # Cloudflare DNS
+  - "1.0.0.1"           # Cloudflare DNS
 
 # Security Configuration
 security:
-  rate_limit_per_ip: 100           # Maximum queries per IP per minute
-  allowed_networks: ["0.0.0.0/0"]  # Allowed networks in CIDR notation
-  blacklist_enabled: true          # Enable domain blacklisting
-  debug_client_ip: false           # Enable detailed client IP debugging logs
+  rate_limit_per_ip: 100               # Max queries per IP per minute
+  block_malformed_requests: true       # Block malformed DNS requests
+  enable_dns_sec: false               # Enable DNSSEC validation (experimental)
+  enable_query_logging: true          # Log all DNS queries
+  max_query_length: 512               # Maximum query length in bytes
+  enable_response_filtering: false    # Enable response filtering
+  debug_client_ip: false              # Debug client IP extraction
 
-# Web Interface Configuration
-web:
-  enabled: true              # Enable web interface
-  real_time_updates: true    # Enable real-time updates via WebSocket
-  history_limit: 1000        # Number of queries to keep in history
-
-# DNS Resolution Configuration
-resolution:
-  query_timeout: 5           # Query timeout in seconds
-  retry_attempts: 3          # Number of retry attempts for failed queries
-  retry_interval: 1          # Interval between retries in seconds
-  recursive_enabled: true    # Enable recursive resolution
-  iterative_enabled: true    # Enable iterative resolution
-
-# Performance Configuration
-performance:
-  max_concurrent_queries: 1000    # Maximum concurrent queries (deprecated - use server.max_concurrent_requests)
-  connection_timeout: 30          # Connection timeout in seconds (deprecated - use server.connection_timeout)
-  buffer_size: 8192              # Buffer size for network operations
-
-  # Memory Management
-  memory_monitoring_enabled: true  # Enable memory usage monitoring
-  memory_warning_threshold_mb: 1000  # Memory usage warning threshold
-  memory_cleanup_interval: 300    # Memory cleanup interval in seconds
-
-  # Connection Pool Settings
-  connection_pool_enabled: true   # Enable connection pooling
-  connection_pool_cleanup_interval: 60  # Cleanup interval for old connections
+# Logging Configuration  
+logging:
+  level: "INFO"                       # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "structured"                # Log format: simple, detailed, structured
+  file: "logs/dns_server.log"         # Log file path
+  max_size_mb: 100                    # Maximum log file size in MB
+  backup_count: 5                     # Number of backup log files
+  enable_request_logging: true        # Log all requests
+  log_query_details: true             # Log detailed query information
+  log_performance_metrics: true       # Log performance metrics
+  log_security_events: true           # Log security events
+  structured_format: "json"           # Structured log format: json, key_value
 
 # Monitoring Configuration
 monitoring:
-  health_check_enabled: true      # Enable health check endpoint
-  metrics_enabled: true           # Enable Prometheus metrics
-  alerts_enabled: false           # Enable alerting (requires configuration)
+  enable_metrics: true                # Enable metrics collection
+  metrics_port: 9090                  # Port for metrics endpoint
+  enable_health_check: true           # Enable health check endpoint
+  health_check_interval: 30           # Health check interval in seconds
+  performance_tracking: true          # Track performance metrics
+  alert_on_high_error_rate: true      # Alert on high error rates
+  error_rate_threshold: 0.1           # Error rate threshold (0.0-1.0)
+  alert_on_slow_queries: true         # Alert on slow queries
+  slow_query_threshold_ms: 1000.0     # Slow query threshold in milliseconds
 
-  # Performance Monitoring
-  performance_monitoring_enabled: true  # Enable detailed performance monitoring
-  performance_monitoring_interval: 5.0  # Monitoring collection interval in seconds
-  performance_history_size: 1000        # Number of performance samples to keep
-
-# Time Configuration
-time:
-  proactive_refresh_enabled: true # Enable proactive cache refresh
-  refresh_threshold: 0.8          # Refresh when TTL reaches 80% of expiration
+# Web Interface Configuration
+web:
+  enabled: true                       # Enable web interface
+  debug: false                        # Enable debug mode
+  cors_enabled: true                  # Enable CORS
+  cors_origins: ["*"]                 # CORS allowed origins
+  static_files_path: "web"            # Path to static files
+  api_rate_limit: 1000                # API rate limit per hour
+  websocket_enabled: true             # Enable WebSocket connections
+  websocket_max_connections: 100      # Maximum WebSocket connections
