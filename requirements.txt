@@ -2,6 +2,7 @@
 asyncio>=3.4.3
 dnspython>=2.3.0
 aiohttp>=3.8.0
+aiohttp_cors>=0.7.0
 aiofiles>=22.1.0
 pyyaml>=6.0
 uvloop>=0.17.0  # For better async performance
