@@ -23,13 +23,12 @@ from ..dns_logging import get_request_tracker
 from ..core.performance import performance_monitor
 
 
-def setup_api_routes(app: web.Application, dns_server_app, websocket_manager) -> None:
+def setup_api_routes(app: web.Application, dns_server_app) -> None:
     """Setup API routes."""
     api = APIHandler()
     
-    # Set the DNS server app and websocket manager references
+    # Set the DNS server app reference
     api.set_dns_server_app(dns_server_app)
-    api.set_websocket_manager(websocket_manager)
 
     # Server status and stats
     app.router.add_get("/api/status", api.get_server_status)
@@ -56,16 +55,19 @@ class APIHandler:
 
     def __init__(self):
         """Initialize API handler."""
-        self.websocket_manager = None
-
-    def set_websocket_manager(self, websocket_manager):
-        """Set WebSocket manager for real-time updates."""
-        self.websocket_manager = websocket_manager
+        pass
 
     def get_dns_server_app(self):
         """Get DNS server application instance."""
-        # This is set by the web server when initializing
-        return getattr(self, "_dns_server_app", None)
+        # Handle weak reference properly
+        dns_app_ref = getattr(self, "_dns_server_app", None)
+        if dns_app_ref:
+            # If it's a weak reference, call it to get the actual object
+            if hasattr(dns_app_ref, '__call__'):
+                return dns_app_ref()
+            else:
+                return dns_app_ref
+        return None
 
     def set_dns_server_app(self, dns_app):
         """Set DNS server application instance."""
@@ -87,6 +89,10 @@ class APIHandler:
             request_tracker = get_request_tracker()
             tracker_stats = request_tracker.get_stats()
 
+            # Merge query type statistics into dns_stats for chart compatibility
+            dns_stats_with_query_types = dns_stats.copy()
+            dns_stats_with_query_types.update(tracker_stats)
+
             return web.json_response(
                 {
                     "server": {
@@ -96,7 +102,7 @@ class APIHandler:
                         "web_port": dns_app.config.server.web_port,
                         "bind_address": dns_app.config.server.bind_address,
                     },
-                    "dns": dns_stats,
+                    "dns": dns_stats_with_query_types,
                     "requests": tracker_stats,
                     "timestamp": datetime.utcnow().isoformat() + "Z",
                 }
@@ -150,7 +156,6 @@ class APIHandler:
             query_type = request.query.get("type")
             client_ip = request.query.get("client_ip")
             since = request.query.get("since")  # ISO timestamp
-            cache_hit = request.query.get("cache_hit")  # 'true'/'false'
 
             # Limit the maximum number of logs to prevent abuse
             limit = min(limit, 1000)
@@ -162,33 +167,35 @@ class APIHandler:
                     {"error": "Request tracker not available"}, status=503
                 )
 
-            # Build filters
-            filters = {}
+            # Get recent requests directly from the tracker
+            logs = list(request_tracker.recent_requests)
+            
+            # Apply filters if provided
             if domain_filter:
-                filters["domain"] = domain_filter
+                logs = [log for log in logs if domain_filter.lower() in log.get("domain", "").lower()]
             if query_type:
-                filters["query_type"] = query_type.upper()
+                logs = [log for log in logs if log.get("query_type") == query_type.upper()]
             if client_ip:
-                filters["client_ip"] = client_ip
-            if cache_hit is not None:
-                filters["cache_hit"] = cache_hit.lower() == "true"
+                logs = [log for log in logs if log.get("client_ip") == client_ip]
             if since:
-                filters["since"] = since
+                try:
+                    since_time = datetime.fromisoformat(since.replace("Z", "+00:00"))
+                    logs = [log for log in logs 
+                           if datetime.fromisoformat(log.get("timestamp", "").replace("Z", "+00:00")) >= since_time]
+                except ValueError:
+                    pass  # Skip invalid timestamp filter
 
-            # Get logs (this would need to be implemented in the request tracker)
-            logs = []
-            if hasattr(request_tracker, "get_recent_requests"):
-                logs = await request_tracker.get_recent_requests(
-                    limit=limit, offset=offset, filters=filters
-                )
+            # Apply offset and limit
+            total_count = len(logs)
+            logs = logs[offset:offset + limit]
 
             return web.json_response(
                 {
                     "logs": logs,
-                    "total": len(logs),
+                    "total": total_count,
+                    "count": len(logs),
                     "limit": limit,
                     "offset": offset,
-                    "filters": filters,
                     "timestamp": datetime.utcnow().isoformat() + "Z",
                 }
             )
