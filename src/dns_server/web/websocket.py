@@ -17,6 +17,7 @@ from typing import Dict, Optional, Set
 from aiohttp import web_ws
 
 from ..dns_logging import get_logger, get_request_tracker, log_exception
+from ..core.performance import performance_monitor
 
 
 class WebSocketManager:
@@ -313,10 +314,10 @@ class WebSocketManager:
                 dns_stats = dns_app.dns_server.get_stats()
                 status["dns_stats"] = dns_stats
 
-            # Add cache stats if available
-            if dns_app.cache and hasattr(dns_app.cache, "stats_manager"):
-                cache_stats = await dns_app.cache.stats_manager.get_stats()
-                status["cache_stats"] = cache_stats
+            # Add performance stats
+            if performance_monitor:
+                performance_stats = performance_monitor.get_stats()
+                status["performance_stats"] = performance_stats
 
             await self._send_to_client(client_id, status)
 
@@ -383,10 +384,10 @@ class WebSocketManager:
                     dns_stats = dns_app.dns_server.get_stats()
                     stats["dns_stats"] = dns_stats
 
-                # Cache stats
-                if dns_app.cache and hasattr(dns_app.cache, "stats_manager"):
-                    cache_stats = await dns_app.cache.stats_manager.get_stats()
-                    stats["cache_stats"] = cache_stats
+                # Performance stats
+                if performance_monitor:
+                    performance_stats = performance_monitor.get_stats()
+                    stats["performance_stats"] = performance_stats
 
                 await self.broadcast(stats)
 
@@ -413,17 +414,6 @@ class WebSocketManager:
             query_data: DNS query data
         """
         await self.broadcast({"type": "dns_query", "query": query_data})
-
-    async def send_cache_event(self, event_type: str, data: dict) -> None:
-        """Send cache event to all clients.
-
-        Args:
-            event_type: Type of cache event (hit, miss, eviction, etc.)
-            data: Event data
-        """
-        await self.broadcast(
-            {"type": "cache_event", "event_type": event_type, "data": data}
-        )
 
     async def send_server_event(
         self, event_type: str, message: str, data: dict = None

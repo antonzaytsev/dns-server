@@ -80,31 +80,6 @@
                     </div>
                 </div>
 
-                <div class="card cache-stats">
-                    <div class="card-header">
-                        <h3>Cache Performance</h3>
-                        <span class="card-icon">💾</span>
-                    </div>
-                    <div class="card-content">
-                        <div class="status-item">
-                            <span class="label">Hit Ratio:</span>
-                            <span id="cache-hit-ratio" class="value">0%</span>
-                        </div>
-                        <div class="status-item">
-                            <span class="label">Cache Hits:</span>
-                            <span id="cache-hits" class="value">0</span>
-                        </div>
-                        <div class="status-item">
-                            <span class="label">Cache Misses:</span>
-                            <span id="cache-misses" class="value">0</span>
-                        </div>
-                        <div class="status-item">
-                            <span class="label">Memory Usage:</span>
-                            <span id="cache-memory" class="value">0 MB</span>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="card performance-stats">
                     <div class="card-header">
                         <h3>Performance</h3>
@@ -145,16 +120,6 @@
 
                 <div class="chart-card">
                     <div class="card-header">
-                        <h3>Cache Hit/Miss Ratio</h3>
-                        <span class="card-icon">🎯</span>
-                    </div>
-                    <div class="chart-container">
-                        <canvas id="cache-ratio-chart"></canvas>
-                    </div>
-                </div>
-
-                <div class="chart-card">
-                    <div class="card-header">
                         <h3>Response Time Trend</h3>
                         <span class="card-icon">⏱️</span>
                     </div>
@@ -188,33 +153,9 @@
                             <div class="query-col response-col">Response</div>
                             <div class="query-col ip-addresses-col">IP Addresses</div>
                             <div class="query-col time-col">Time (ms)</div>
-                            <div class="query-col cache-col">Cache</div>
                         </div>
                         <div class="queries-list" id="queries-list">
                             <!-- Queries will be populated by JavaScript -->
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Cache Controls Section -->
-            <section class="controls-section">
-                <div class="card controls-card">
-                    <div class="card-header">
-                        <h3>Cache Management</h3>
-                        <span class="card-icon">⚙️</span>
-                    </div>
-                    <div class="card-content">
-                        <div class="control-group">
-                            <button id="flush-cache" class="control-btn">🔄 Flush Expired</button>
-                            <button id="clear-cache" class="control-btn danger">🗑️ Clear All</button>
-                        </div>
-                        <div class="control-group">
-                            <label for="flush-domain">Flush by domain:</label>
-                            <div class="input-group">
-                                <input type="text" id="flush-domain" placeholder="example.com" class="domain-input">
-                                <button id="flush-domain-btn" class="control-btn">🎯 Flush Domain</button>
-                            </div>
                         </div>
                     </div>
                 </div>

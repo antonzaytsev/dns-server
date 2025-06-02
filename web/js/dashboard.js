@@ -31,7 +31,7 @@ class DNSDashboard {
     init() {
         console.log('Initializing DNS Dashboard');
 
-        this.setupEventListeners();
+        this.initializeEventListeners();
         this.loadTheme();
         this.fetchInitialData();
         this.startAutoRefresh();
@@ -45,48 +45,32 @@ class DNSDashboard {
         }, 2000);
     }
 
-    /**
-     * Setup event listeners
-     */
-    setupEventListeners() {
-        // Theme toggle
-        const themeToggle = document.getElementById('theme-toggle');
-        if (themeToggle) {
-            themeToggle.addEventListener('click', this.toggleTheme);
-        }
-
+    initializeEventListeners() {
         // Refresh button
         const refreshBtn = document.getElementById('refresh-btn');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', this.refreshData);
+            refreshBtn.addEventListener('click', this.refreshData.bind(this));
         }
 
-        // Cache controls
-        const flushCacheBtn = document.getElementById('flush-cache');
-        if (flushCacheBtn) {
-            flushCacheBtn.addEventListener('click', this.flushCache.bind(this));
+        // Theme toggle
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', this.toggleTheme.bind(this));
         }
 
-        const clearCacheBtn = document.getElementById('clear-cache');
-        if (clearCacheBtn) {
-            clearCacheBtn.addEventListener('click', this.clearCache.bind(this));
+        // Clear logs button
+        const clearLogsBtn = document.getElementById('clear-logs');
+        if (clearLogsBtn) {
+            clearLogsBtn.addEventListener('click', this.clearLogs.bind(this));
         }
 
-        const flushDomainBtn = document.getElementById('flush-domain-btn');
-        if (flushDomainBtn) {
-            flushDomainBtn.addEventListener('click', this.flushDomainCache.bind(this));
-        }
-
-        // Search functionality
+        // Search input
         const searchInput = document.getElementById('search-input');
         if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                this.searchFilter = e.target.value.toLowerCase();
-                this.filterQueries();
-            });
+            searchInput.addEventListener('input', this.filterQueries.bind(this));
         }
 
-        // Auto-scroll toggle
+        // Auto-scroll checkbox
         const autoScrollCheckbox = document.getElementById('auto-scroll');
         if (autoScrollCheckbox) {
             autoScrollCheckbox.addEventListener('change', (e) => {
@@ -94,21 +78,17 @@ class DNSDashboard {
             });
         }
 
-        // Clear logs button
-        const clearLogsBtn = document.getElementById('clear-logs');
-        if (clearLogsBtn) {
-            clearLogsBtn.addEventListener('click', this.clearQueries.bind(this));
-        }
-
-        // Handle domain input enter key
-        const domainInput = document.getElementById('flush-domain');
-        if (domainInput) {
-            domainInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    this.flushDomainCache();
-                }
-            });
-        }
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                this.refreshData();
+            }
+            if (e.key === 'c' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+                e.preventDefault();
+                this.clearLogs();
+            }
+        });
     }
 
     /**
@@ -267,17 +247,6 @@ class DNSDashboard {
             }
         }
 
-        // Update cache stats
-        if (data.cache) {
-            this.updateElement('cache-hits', data.cache.cache_hits || 0);
-            this.updateElement('cache-misses', data.cache.cache_misses || 0);
-
-            const hitRatio = data.cache.hit_ratio || 0;
-            this.updateElement('cache-hit-ratio', (hitRatio * 100).toFixed(1) + '%');
-
-            this.updateElement('cache-memory', (data.cache.current_memory_mb || 0).toFixed(1) + ' MB');
-        }
-
         // Update WebSocket clients
         if (data.websocket) {
             this.updateElement('websocket-clients', data.websocket.connected_clients || 0);
@@ -289,15 +258,15 @@ class DNSDashboard {
         }
 
         // Update charts
-        this.updateStats(data.dns, data.cache);
+        this.updateStats(data.dns);
     }
 
     /**
      * Update statistics (called by WebSocket or API)
      */
-    updateStats(dnsStats, cacheStats) {
+    updateStats(dnsStats) {
         if (window.chartsManager) {
-            window.chartsManager.updateCharts(dnsStats, cacheStats);
+            window.chartsManager.updateCharts(dnsStats);
         }
     }
 
@@ -407,10 +376,6 @@ class DNSDashboard {
         // Format response code
         const responseClass = ['NOERROR', 'SUCCESS'].includes(query.response_code) ? 'success' : 'error';
 
-        // Format cache status
-        const cacheStatus = query.cache_hit ? 'HIT' : 'MISS';
-        const cacheClass = query.cache_hit ? 'cache-hit' : 'cache-miss';
-
         // Extract IP addresses from response_data
         let ipAddresses = '-';
         if (query.response_data && query.response_data.length > 0) {
@@ -455,9 +420,6 @@ class DNSDashboard {
             </div>
             <div class="query-col ip-addresses-col" title="${ipAddresses}">${ipAddresses}</div>
             <div class="query-col time-col">${query.response_time_ms || '-'}</div>
-            <div class="query-col cache-col">
-                <span class="${cacheClass}">${cacheStatus}</span>
-            </div>
         `;
 
         return row;
@@ -467,13 +429,17 @@ class DNSDashboard {
      * Filter queries based on search input
      */
     filterQueries() {
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) {
+            this.searchFilter = searchInput.value.toLowerCase();
+        }
         this.renderQueries();
     }
 
     /**
      * Clear all queries
      */
-    clearQueries() {
+    clearLogs() {
         this.queries = [];
         this.renderQueries();
 
@@ -483,93 +449,6 @@ class DNSDashboard {
         }
 
         this.showNotification('Query logs cleared', 'info');
-    }
-
-    /**
-     * Flush cache
-     */
-    async flushCache() {
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/cache/flush`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.showNotification(`Cache flushed: ${data.entries_removed || 0} entries removed`, 'success');
-                this.refreshData();
-            } else {
-                throw new Error('Failed to flush cache');
-            }
-        } catch (error) {
-            console.error('Error flushing cache:', error);
-            this.showNotification('Failed to flush cache', 'error');
-        }
-    }
-
-    /**
-     * Clear cache
-     */
-    async clearCache() {
-        if (!confirm('Are you sure you want to clear the entire cache?')) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/cache/clear`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.showNotification(`Cache cleared: ${data.entries_removed || 0} entries removed`, 'success');
-                this.refreshData();
-            } else {
-                throw new Error('Failed to clear cache');
-            }
-        } catch (error) {
-            console.error('Error clearing cache:', error);
-            this.showNotification('Failed to clear cache', 'error');
-        }
-    }
-
-    /**
-     * Flush domain-specific cache
-     */
-    async flushDomainCache() {
-        const domainInput = document.getElementById('flush-domain');
-        if (!domainInput) return;
-
-        const domain = domainInput.value.trim();
-        if (!domain) {
-            this.showNotification('Please enter a domain name', 'warning');
-            return;
-        }
-
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/cache/flush`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ domain: domain })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.showNotification(`Domain cache flushed: ${data.entries_removed || 0} entries removed`, 'success');
-                domainInput.value = '';
-                this.refreshData();
-            } else {
-                throw new Error('Failed to flush domain cache');
-            }
-        } catch (error) {
-            console.error('Error flushing domain cache:', error);
-            this.showNotification('Failed to flush domain cache', 'error');
-        }
     }
 
     /**
