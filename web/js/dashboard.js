@@ -411,6 +411,40 @@ class DNSDashboard {
         const cacheStatus = query.cache_hit ? 'HIT' : 'MISS';
         const cacheClass = query.cache_hit ? 'cache-hit' : 'cache-miss';
 
+        // Extract IP addresses from response_data
+        let ipAddresses = '-';
+        if (query.response_data && query.response_data.length > 0) {
+            const ips = [];
+            query.response_data.forEach(data => {
+                // Skip entries that start with "rdata=" as they contain DNS binary data
+                if (data.toString().startsWith("rdata=")) {
+                    return;
+                }
+                
+                // Extract IP addresses from various response formats
+                // Handle formats like "example.com. 1.2.3.4" or just "1.2.3.4"
+                const parts = data.toString().split(/\s+/);
+                let candidateIp = null;
+                
+                if (parts.length >= 2) {
+                    // Format: "example.com. 1.2.3.4"
+                    candidateIp = parts[parts.length - 1];
+                } else if (parts.length === 1) {
+                    // Format: "1.2.3.4"
+                    candidateIp = parts[0];
+                }
+                
+                // Validate that it's actually an IP address (IPv4 or IPv6)
+                if (candidateIp && this.isValidIpAddress(candidateIp)) {
+                    ips.push(candidateIp);
+                }
+            });
+            
+            if (ips.length > 0) {
+                ipAddresses = ips.join(', ');
+            }
+        }
+
         row.innerHTML = `
             <div class="query-col timestamp-col">${timestamp}</div>
             <div class="query-col client-col">${query.client_ip || '-'}</div>
@@ -419,6 +453,7 @@ class DNSDashboard {
             <div class="query-col response-col">
                 <span class="response-code ${responseClass}">${query.response_code || '-'}</span>
             </div>
+            <div class="query-col ip-addresses-col" title="${ipAddresses}">${ipAddresses}</div>
             <div class="query-col time-col">${query.response_time_ms || '-'}</div>
             <div class="query-col cache-col">
                 <span class="${cacheClass}">${cacheStatus}</span>
@@ -613,6 +648,16 @@ class DNSDashboard {
         if (window.wsManager) {
             window.wsManager.disconnect();
         }
+    }
+
+    /**
+     * Validate IP address
+     */
+    isValidIpAddress(ip) {
+        return (/^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ip) ||
+                /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/.test(ip) ||
+                /^::1$/.test(ip) ||
+                /^::ffff:[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(ip));
     }
 }
 
