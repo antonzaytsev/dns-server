@@ -197,16 +197,29 @@ class ChartsManager {
     updateQueryTypesChart(dnsStats) {
         if (!this.charts.queryTypes) return;
 
-        // For now, we'll use placeholder data since we don't have detailed query type stats
-        // In a real implementation, you'd track these stats in the DNS server
-        const data = [
-            dnsStats.total_queries * 0.7,  // A records (70%)
-            dnsStats.total_queries * 0.15, // AAAA records (15%)
-            dnsStats.total_queries * 0.08, // CNAME records (8%)
-            dnsStats.total_queries * 0.04, // MX records (4%)
-            dnsStats.total_queries * 0.02, // TXT records (2%)
-            dnsStats.total_queries * 0.01  // Other (1%)
-        ];
+        // Use real query type statistics if available
+        let data = [0, 0, 0, 0, 0, 0]; // Default to zeros
+        
+        if (dnsStats && dnsStats.query_types) {
+            const knownTypes = ['A', 'AAAA', 'CNAME', 'MX', 'TXT'];
+            data = knownTypes.map(type => dnsStats.query_types[type] || 0);
+            
+            // Add "Other" category - sum of all types not in knownTypes
+            const otherCount = Object.keys(dnsStats.query_types)
+                .filter(type => !knownTypes.includes(type))
+                .reduce((sum, type) => sum + dnsStats.query_types[type], 0);
+            data.push(otherCount);
+        } else if (dnsStats && dnsStats.total_queries > 0) {
+            // Fallback to placeholder data if query_types not available
+            data = [
+                dnsStats.total_queries * 0.7,  // A records (70%)
+                dnsStats.total_queries * 0.15, // AAAA records (15%)
+                dnsStats.total_queries * 0.08, // CNAME records (8%)
+                dnsStats.total_queries * 0.04, // MX records (4%)
+                dnsStats.total_queries * 0.02, // TXT records (2%)
+                dnsStats.total_queries * 0.01  // Other (1%)
+            ];
+        }
 
         this.charts.queryTypes.data.datasets[0].data = data;
         this.charts.queryTypes.update('none');
