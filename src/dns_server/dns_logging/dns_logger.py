@@ -94,6 +94,33 @@ class DNSRequestLogger:
         # Initialize specialized file logger for DNS queries
         self.file_logger = DNSFileLogger()
 
+    def _is_valid_ip_address(self, ip_str: str) -> bool:
+        """Check if a string is a valid IP address (IPv4 or IPv6).
+        
+        Args:
+            ip_str: String to validate as IP address
+            
+        Returns:
+            True if valid IP address, False otherwise
+        """
+        import socket
+        
+        # Try IPv4
+        try:
+            socket.inet_pton(socket.AF_INET, ip_str)
+            return True
+        except socket.error:
+            pass
+        
+        # Try IPv6
+        try:
+            socket.inet_pton(socket.AF_INET6, ip_str)
+            return True
+        except socket.error:
+            pass
+            
+        return False
+
     def log_dns_request(
         self,
         request_id: str,
@@ -152,15 +179,25 @@ class DNSRequestLogger:
             # Extract IP addresses from response data
             ip_addresses = []
             for data in response_data:
+                # Skip entries that start with "rdata=" as they contain DNS binary data
+                if data.startswith("rdata="):
+                    continue
+                    
                 # For A/AAAA records, the response data should be IP addresses
                 # Handle both "domain IP" and just "IP" formats
                 parts = data.split()
+                candidate_ip = None
+                
                 if len(parts) >= 2:
                     # Format: "example.com. 1.2.3.4"
-                    ip_addresses.append(parts[-1])
+                    candidate_ip = parts[-1]
                 elif len(parts) == 1:
                     # Format: "1.2.3.4"
-                    ip_addresses.append(parts[0])
+                    candidate_ip = parts[0]
+                
+                # Validate that the candidate is actually an IP address
+                if candidate_ip and self._is_valid_ip_address(candidate_ip):
+                    ip_addresses.append(candidate_ip)
 
             if ip_addresses:
                 self.file_logger.log_dns_query(domain, ip_addresses)
