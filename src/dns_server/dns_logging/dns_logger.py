@@ -466,6 +466,59 @@ class DNSRequestTracker:
         """
         return len(self.recent_requests)
 
+    def get_stats(self) -> Dict[str, Any]:
+        """Get statistics about DNS requests.
+        
+        Returns:
+            Dictionary containing request statistics
+        """
+        total_requests = len(self.recent_requests)
+        
+        if total_requests == 0:
+            return {
+                "total_requests": 0,
+                "query_types": {},
+                "response_codes": {},
+                "avg_response_time_ms": 0,
+                "cache_hit_ratio": 0
+            }
+        
+        # Count query types
+        query_types = {}
+        response_codes = {}
+        response_times = []
+        cache_hits = 0
+        
+        for request in self.recent_requests:
+            # Count query types
+            qtype = request.get("query_type", "UNKNOWN")
+            query_types[qtype] = query_types.get(qtype, 0) + 1
+            
+            # Count response codes
+            rcode = request.get("response_code", "UNKNOWN")
+            response_codes[rcode] = response_codes.get(rcode, 0) + 1
+            
+            # Collect response times
+            rt = request.get("response_time_ms", 0)
+            if rt > 0:
+                response_times.append(rt)
+            
+            # Count cache hits
+            if request.get("cache_hit", False):
+                cache_hits += 1
+        
+        # Calculate averages
+        avg_response_time = sum(response_times) / len(response_times) if response_times else 0
+        cache_hit_ratio = cache_hits / total_requests if total_requests > 0 else 0
+        
+        return {
+            "total_requests": total_requests,
+            "query_types": query_types,
+            "response_codes": response_codes,
+            "avg_response_time_ms": round(avg_response_time, 2),
+            "cache_hit_ratio": round(cache_hit_ratio, 3)
+        }
+
     def clear_recent_requests(self) -> None:
         """Clear all stored recent requests."""
         self.recent_requests.clear()
