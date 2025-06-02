@@ -62,8 +62,8 @@ class DNSFileLogger:
         file_handler.setFormatter(DNSJSONFormatter())
         self.file_logger.addHandler(file_handler)
 
-    def log_dns_query(self, domain: str, ip_addresses: List[str]) -> None:
-        """Log DNS query in the specified JSON format.
+    def log_dns_query(self, domain: str, ip_addresses: List[str] = None) -> None:
+        """Log successful DNS query in the specified JSON format.
 
         Args:
             domain: Domain name that was queried
@@ -77,7 +77,33 @@ class DNSFileLogger:
         log_entry = {
             "datetime": formatted_datetime,
             "domain": domain.rstrip("."),  # Remove trailing dot if present
-            "ip_address": ip_addresses,
+            "ip_address": ip_addresses or [],
+            "status": "success",
+            "message": None
+        }
+
+        # Write as single JSON line
+        json_line = json.dumps(log_entry, separators=(",", ":"))
+        self.file_logger.info(json_line)
+
+    def log_dns_error(self, domain: str, error_message: str) -> None:
+        """Log unsuccessful DNS query in the specified JSON format.
+
+        Args:
+            domain: Domain name that was queried
+            error_message: Error message describing the failure
+        """
+        # Format datetime as "YYYY-MM-DD HH:MM:SS UTC"
+        current_time = datetime.now(timezone.utc)
+        formatted_datetime = current_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        # Create log entry for unsuccessful resolution
+        log_entry = {
+            "datetime": formatted_datetime,
+            "domain": domain.rstrip("."),  # Remove trailing dot if present
+            "ip_address": [],
+            "status": "failed",
+            "message": error_message
         }
 
         # Write as single JSON line
@@ -169,13 +195,13 @@ class DNSRequestLogger:
         # Log the entry to console/structured logs
         self.logger.info("DNS request processed", **log_entry)
 
-        # Log to specialized DNS file if successful query with IP addresses
-        if (
-            not error
-            and response_code == "NOERROR"
-            and response_data
-            and query_type in ["A", "AAAA"]
-        ):  # Only log A and AAAA records with IPs
+        # Log to specialized DNS file based on query result
+        if error or response_code != "NOERROR":
+            # Log unsuccessful queries with error message
+            error_msg = error or f"DNS resolution failed with response code: {response_code}"
+            self.file_logger.log_dns_error(domain, error_msg)
+        elif response_code == "NOERROR" and response_data and query_type in ["A", "AAAA"]:
+            # Log successful A and AAAA queries with IP addresses
             # Extract IP addresses from response data
             ip_addresses = []
             for data in response_data:
@@ -201,6 +227,9 @@ class DNSRequestLogger:
 
             if ip_addresses:
                 self.file_logger.log_dns_query(domain, ip_addresses)
+        else:
+            # Log other successful queries (CNAME, MX, etc.) without IP addresses
+            self.file_logger.log_dns_query(domain, [])
 
     def log_dns_error(
         self,
@@ -221,6 +250,10 @@ class DNSRequestLogger:
             error: Error description
             response_time_ms: Response time in milliseconds
         """
+        # Log to file logger
+        self.file_logger.log_dns_error(domain, error)
+        
+        # Log to structured logging system
         self.log_dns_request(
             request_id=request_id,
             client_ip=client_ip,
