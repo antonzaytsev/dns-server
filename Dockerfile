@@ -25,14 +25,17 @@ COPY src/ src/
 COPY config/ config/
 COPY web/ web/
 
-# Create directories for logs and cache
-RUN mkdir -p logs cache
+# Install gosu for potential privilege dropping (keep for future use)
+RUN apt-get update && apt-get install -y gosu && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
 RUN groupadd -r dnsserver && useradd -r -g dnsserver dnsserver
 
-# Change ownership of application directory
-RUN chown -R dnsserver:dnsserver /app
+# Create directories for logs and cache with proper permissions
+RUN mkdir -p logs cache && \
+    chown -R dnsserver:dnsserver /app && \
+    chmod -R 755 /app && \
+    chmod -R 777 logs cache
 
 # Switch to non-root user
 USER dnsserver
