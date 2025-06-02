@@ -11,11 +11,20 @@ class DNSDashboard {
         this.queries = [];
         this.maxQueries = 1000;
         this.currentTheme = 'light';
-        this.autoRefresh = true;
-        this.refreshInterval = 30000; // 30 seconds
-        this.refreshTimer = null;
-        this.searchFilter = '';
         this.autoScroll = true;
+        this.autoRefresh = true;
+        this.refreshInterval = 5000; // 5 seconds
+        this.refreshTimer = null;
+        
+        // Polling timers
+        this.statusPollingTimer = null;
+        this.queriesPollingTimer = null;
+        this.statusPollingInterval = 2000; // 2 seconds for status/stats
+        this.queriesPollingInterval = 3000; // 3 seconds for queries
+        
+        // Search and filtering
+        this.searchFilter = '';
+        this.lastQueryCount = 0; // Track if new queries arrived
 
         // Bind methods
         this.init = this.init.bind(this);
@@ -28,21 +37,20 @@ class DNSDashboard {
     /**
      * Initialize the dashboard
      */
-    init() {
-        console.log('Initializing DNS Dashboard');
+    async init() {
+        console.log('🚀 DNS Dashboard: Initializing...');
 
-        this.initializeEventListeners();
+        // Load theme
         this.loadTheme();
-        this.fetchInitialData();
-        this.startAutoRefresh();
 
-        // Show loading overlay initially
-        this.showLoading();
+        // Initialize event listeners
+        this.initializeEventListeners();
 
-        // Hide loading after initial load
-        setTimeout(() => {
-            this.hideLoading();
-        }, 2000);
+        // Start data fetching and polling
+        await this.fetchInitialData();
+        this.startPolling();
+        
+        console.log('✅ DNS Dashboard: Initialized successfully');
     }
 
     initializeEventListeners() {
@@ -173,42 +181,146 @@ class DNSDashboard {
     }
 
     /**
-     * Start auto-refresh timer
+     * Start HTTP polling for real-time updates
      */
-    startAutoRefresh() {
-        if (this.refreshTimer) {
-            clearInterval(this.refreshTimer);
+    startPolling() {
+        console.log('🔄 Starting HTTP polling for real-time updates');
+        
+        // Update status indicators
+        this.updatePollingStatus('active');
+        
+        // Poll server status and statistics
+        this.statusPollingTimer = setInterval(async () => {
+            try {
+                const response = await fetch(`${this.apiBaseUrl}/status`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.updateServerStatus(data);
+                    this.updatePollingStatus('active');
+                    this.updateLastUpdateTime();
+                } else {
+                    this.updatePollingStatus('error');
+                }
+            } catch (error) {
+                console.error('Status polling error:', error);
+                this.updatePollingStatus('error');
+            }
+        }, this.statusPollingInterval);
+
+        // Poll for new queries
+        this.queriesPollingTimer = setInterval(async () => {
+            try {
+                const response = await fetch(`${this.apiBaseUrl}/queries?limit=50`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.logs && data.logs.length > 0) {
+                        this.updateQueriesIfChanged(data.logs);
+                    }
+                }
+            } catch (error) {
+                console.error('Queries polling error:', error);
+            }
+        }, this.queriesPollingInterval);
+    }
+
+    /**
+     * Stop HTTP polling
+     */
+    stopPolling() {
+        console.log('⏹️ Stopping HTTP polling');
+        
+        if (this.statusPollingTimer) {
+            clearInterval(this.statusPollingTimer);
+            this.statusPollingTimer = null;
+        }
+        
+        if (this.queriesPollingTimer) {
+            clearInterval(this.queriesPollingTimer);
+            this.queriesPollingTimer = null;
+        }
+        
+        this.updatePollingStatus('stopped');
+    }
+
+    /**
+     * Update polling status display
+     */
+    updatePollingStatus(status) {
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const pollingStatus = document.getElementById('polling-status');
+
+        if (statusDot && statusText) {
+            statusDot.className = 'status-dot';
+
+            switch (status) {
+                case 'active':
+                    statusDot.classList.add('connected');
+                    statusText.textContent = 'Active';
+                    break;
+                case 'error':
+                    statusDot.classList.add('error');
+                    statusText.textContent = 'Error';
+                    break;
+                case 'stopped':
+                    statusText.textContent = 'Stopped';
+                    break;
+                default:
+                    statusText.textContent = 'Loading...';
+            }
         }
 
-        if (this.autoRefresh) {
-            this.refreshTimer = setInterval(() => {
-                this.refreshData();
-            }, this.refreshInterval);
+        if (pollingStatus) {
+            pollingStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
         }
     }
 
     /**
-     * Refresh data from API
+     * Update last update time
      */
-    async refreshData() {
-        const refreshBtn = document.getElementById('refresh-btn');
-        if (refreshBtn) {
-            refreshBtn.classList.add('spinning');
+    updateLastUpdateTime() {
+        const lastUpdate = document.getElementById('last-update');
+        if (lastUpdate) {
+            lastUpdate.textContent = new Date().toLocaleTimeString();
         }
+    }
 
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/status`);
-            if (response.ok) {
-                const data = await response.json();
-                this.updateServerStatus(data);
-                this.showNotification('Data refreshed', 'info');
+    /**
+     * Update queries if new ones arrived
+     */
+    updateQueriesIfChanged(newQueries) {
+        // Check if we have new queries by comparing the first query timestamp
+        if (newQueries.length === 0) return;
+        
+        const latestTimestamp = newQueries[0].timestamp;
+        const currentLatestTimestamp = this.queries.length > 0 ? this.queries[0].timestamp : null;
+        
+        // If we have new queries, update the list
+        if (!currentLatestTimestamp || latestTimestamp !== currentLatestTimestamp) {
+            console.log('📊 New queries detected, updating dashboard');
+            
+            // Find truly new queries by comparing timestamps
+            const newEntries = [];
+            for (const query of newQueries) {
+                const exists = this.queries.find(q => q.timestamp === query.timestamp && q.request_id === query.request_id);
+                if (!exists) {
+                    newEntries.push(query);
+                }
             }
-        } catch (error) {
-            console.error('Error refreshing data:', error);
-            this.showNotification('Failed to refresh data', 'error');
-        } finally {
-            if (refreshBtn) {
-                refreshBtn.classList.remove('spinning');
+            
+            // Add new queries to the beginning of the array
+            if (newEntries.length > 0) {
+                this.queries = [...newEntries, ...this.queries].slice(0, this.maxQueries);
+                this.renderQueries();
+                
+                // Update charts with new queries
+                newEntries.forEach(query => {
+                    if (window.chartsManager) {
+                        window.chartsManager.addDnsQuery(query);
+                    }
+                });
+                
+                console.log(`✅ Added ${newEntries.length} new DNS queries`);
             }
         }
     }
@@ -516,17 +628,22 @@ class DNSDashboard {
      * Destroy dashboard and cleanup
      */
     destroy() {
+        console.log('🧹 Cleaning up DNS Dashboard');
+        
+        // Stop polling
+        this.stopPolling();
+        
+        // Stop auto-refresh timer if it exists
         if (this.refreshTimer) {
             clearInterval(this.refreshTimer);
         }
 
+        // Destroy charts
         if (window.chartsManager) {
             window.chartsManager.destroy();
         }
 
-        if (window.wsManager) {
-            window.wsManager.disconnect();
-        }
+        console.log('✅ DNS Dashboard cleanup complete');
     }
 
     /**
@@ -537,6 +654,44 @@ class DNSDashboard {
                 /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/.test(ip) ||
                 /^::1$/.test(ip) ||
                 /^::ffff:[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(ip));
+    }
+
+    /**
+     * Refresh data from API manually
+     */
+    async refreshData() {
+        const refreshBtn = document.getElementById('refresh-btn');
+        if (refreshBtn) {
+            refreshBtn.classList.add('spinning');
+        }
+
+        try {
+            // Fetch current status
+            const statusResponse = await fetch(`${this.apiBaseUrl}/status`);
+            if (statusResponse.ok) {
+                const statusData = await statusResponse.json();
+                this.updateServerStatus(statusData);
+            }
+
+            // Fetch recent queries
+            const queriesResponse = await fetch(`${this.apiBaseUrl}/queries?limit=50`);
+            if (queriesResponse.ok) {
+                const queriesData = await queriesResponse.json();
+                if (queriesData.logs) {
+                    this.queries = queriesData.logs.slice(0, this.maxQueries);
+                    this.renderQueries();
+                }
+            }
+
+            this.showNotification('Data refreshed', 'info');
+        } catch (error) {
+            console.error('Error refreshing data:', error);
+            this.showNotification('Failed to refresh data', 'error');
+        } finally {
+            if (refreshBtn) {
+                refreshBtn.classList.remove('spinning');
+            }
+        }
     }
 }
 

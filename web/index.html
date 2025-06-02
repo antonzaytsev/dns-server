@@ -19,7 +19,7 @@
                 <div class="header-controls">
                     <div class="status-indicator" id="connection-status">
                         <span class="status-dot" id="status-dot"></span>
-                        <span id="status-text">Connecting...</span>
+                        <span id="status-text">Loading...</span>
                     </div>
                     <button id="theme-toggle" class="theme-toggle" title="Toggle Dark/Light Mode">
                         🌙
@@ -96,7 +96,7 @@
                         </div>
                         <div class="status-item">
                             <span class="label">Connected Clients:</span>
-                            <span id="websocket-clients" class="value">0</span>
+                            <span id="active-connections" class="value">-</span>
                         </div>
                         <div class="status-item">
                             <span class="label">Memory:</span>
@@ -165,10 +165,10 @@
         <!-- Footer -->
         <footer class="footer">
             <div class="footer-content">
-                <p>&copy; 2024 DNS Server Dashboard. Real-time DNS monitoring and management.</p>
+                <p>&copy; 2024 DNS Server Dashboard. Real-time DNS monitoring via HTTP polling.</p>
                 <div class="footer-stats">
                     <span>Last Update: <span id="last-update">Never</span></span>
-                    <span>WebSocket: <span id="ws-status">Disconnected</span></span>
+                    <span>Polling: <span id="polling-status">Active</span></span>
                 </div>
             </div>
         </footer>
@@ -184,7 +184,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="js/websocket.js"></script>
     <script src="js/charts.js"></script>
     <script src="js/dashboard.js"></script>
 </body>
