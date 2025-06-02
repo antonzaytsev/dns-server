@@ -333,7 +333,7 @@ body {
 
 .queries-header {
     display: grid;
-    grid-template-columns: 140px 120px 1fr 80px 100px 80px 80px;
+    grid-template-columns: 140px 120px 1fr 80px 100px 200px 80px 80px;
     gap: 1rem;
     padding: 1rem var(--card-padding);
     background-color: var(--bg-secondary);
@@ -352,7 +352,7 @@ body {
 
 .query-row {
     display: grid;
-    grid-template-columns: 140px 120px 1fr 80px 100px 80px 80px;
+    grid-template-columns: 140px 120px 1fr 80px 100px 200px 80px 80px;
     gap: 1rem;
     padding: 0.75rem var(--card-padding);
     border-bottom: 1px solid var(--border-color);
@@ -377,6 +377,12 @@ body {
 .domain-col {
     font-family: 'Courier New', monospace;
     font-weight: 500;
+}
+
+.query-row .ip-addresses-col {
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    color: var(--primary);
 }
 
 .cache-hit {
@@ -638,8 +644,9 @@ body {
 
     .queries-header,
     .query-row {
-        grid-template-columns: 1fr;
+        grid-template-columns: 100px 90px 1fr 60px 80px 140px 60px 60px;
         gap: 0.5rem;
+        font-size: 0.8rem;
     }
 
     .query-col {
